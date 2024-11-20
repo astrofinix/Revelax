@@ -3,6 +3,25 @@
  * @param username - The username to validate
  * @returns Boolean indicating if the username is valid
  */
+
+// export function validateUsername(username: string) {
+//   const regex = /^[a-zA-Z0-9]{2,20}$/;
+//   return {
+//     isValid: regex.test(username),
+//     error: regex.test(username) ? null : 'Username must be between 2 and 20 characters, and only letters and numbers are allowed.'
+//   };
+// }
+
+// export function generateRandomUsername() {
+//   const adjectives = ['Happy', 'Lucky', 'Sunny', 'Clever', 'Swift'];
+//   const nouns = ['Player', 'Gamer', 'Star', 'Hero', 'Wizard'];
+//   const number = Math.floor(Math.random() * 1000);
+  
+//   const adjective = adjectives[Math.floor(Math.random() * adjectives.length)];
+//   const noun = nouns[Math.floor(Math.random() * nouns.length)];
+  
+//   return `${adjective}${noun}${number}`;
+// }
 export function validateUsername(username: string): ValidationResult {
     // Trim whitespace
     const trimmedUsername = username.trim();
