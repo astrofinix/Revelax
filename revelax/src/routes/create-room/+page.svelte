@@ -1,119 +1,171 @@
 <script>
   import { goto } from '$app/navigation';
   import { supabase } from '$lib/supabaseClient';
+  import { onMount } from 'svelte';
 
   let roomName = '';
-  let roomCode = '';
+  let selectedMode = 'yap_sesh'; // default mode
   let error = '';
-  let copied = false;
+  let isLoading = false;
 
-  async function createRoom() {
+  const gameModes = [
+    { id: 'fil_chill', name: 'The Filipino Chillnuman' },
+    { id: 'yap_sesh', name: 'Yap Session' },
+    { id: 'night_talk', name: 'Deep Night Talks' }
+  ];
+
+  function log(message, type = 'info') {
+    const styles = {
+      info: '📘 [create-room]',
+      error: '🔴 [create-room]',
+      success: '✅ [create-room]'
+    };
+    console.log(`${styles[type]} ${message}`);
+  }
+
+  onMount(() => {
+    const username = localStorage.getItem('username');
+    if (!username) {
+      log('No username found, redirecting to username page', 'error');
+      localStorage.setItem('roomAction', 'create');
+      goto('/username');
+    }
+  });
+
+  function validateRoomName(name) {
+    const alphanumericRegex = /^[a-zA-Z0-9\s]{3,20}$/;
+    return alphanumericRegex.test(name);
+  }
+
+  function generateRoomCode() {
+    return Math.floor(1000 + Math.random() * 9000).toString();
+  }
+
+  async function handleSubmit() {
     try {
-      // Generate a random 4-digit room code
-      roomCode = generateRoomCode();
-      const userId = crypto.randomUUID();
-      const username = localStorage.getItem('username');
-
-      // Check if room code already exists
-      const { data: existingRoom } = await supabase
-        .from('rooms')
-        .select('room_code')
-        .eq('room_code', roomCode)
-        .single();
-
-      if (existingRoom) {
-        // If code exists, try again
-        return createRoom();
+      if (!validateRoomName(roomName)) {
+        error = 'Room name must be 3-20 alphanumeric characters';
+        log(`Invalid room name: ${roomName}`, 'error');
+        return;
       }
 
-      // Create new room
+      isLoading = true;
+      const username = localStorage.getItem('username');
+      const roomCode = generateRoomCode();
+      const userId = crypto.randomUUID();
+
+      log(`Creating room: ${roomName}, Mode: ${selectedMode}, Code: ${roomCode}`, 'info');
+
+      // Create room in database
       const { data: room, error: roomError } = await supabase
         .from('rooms')
         .insert({
           room_code: roomCode,
-          room_name: roomName,
+          room_name: roomName.trim(),
           admin_id: userId,
+          game_mode: selectedMode,
           is_active: true
         })
         .select()
         .single();
 
       if (roomError) throw roomError;
+      log('Room created successfully', 'success');
 
-      // ... rest of the create room logic ...
+      // Create admin player
+      const { error: playerError } = await supabase
+        .from('players')
+        .insert({
+          room_id: room.id,
+          user_id: userId,
+          username: username,
+          is_admin: true,
+          is_connected: true
+        });
+
+      if (playerError) {
+        await supabase.from('rooms').delete().eq('id', room.id);
+        throw playerError;
+      }
+      log('Admin player created successfully', 'success');
+
+      // Store data for lobby
+      localStorage.setItem('userId', userId);
+      localStorage.setItem('roomId', room.id);
+      localStorage.setItem('currentRoomCode', roomCode);
+
+      log('Redirecting to lobby...', 'info');
+      goto('/lobby');
+
     } catch (err) {
-      console.error('Error creating room:', err);
-      error = 'Failed to create room';
+      log(`Error: ${err.message}`, 'error');
+      error = 'Failed to create room. Please try again.';
+    } finally {
+      isLoading = false;
     }
-  }
-
-  function generateRoomCode() {
-    // Generate a random number between 1000 and 9999
-    return Math.floor(1000 + Math.random() * 9000).toString();
-  }
-  async function copyToClipboard() {
-    try {
-      await navigator.clipboard.writeText(roomCode);
-      copied = true;
-      setTimeout(() => copied = false, 2000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
-    }
-  }
-
-  function startGame() {
-    goto(`/room/${roomCode}`);
   }
 </script>
 
-<div class="min-h-screen flex flex-col justify-center items-center bg-gray-800 text-white">
-  <h1 class="text-4xl font-bold mb-8">Create Room</h1>
-  
-  {#if !roomCode}
-    <div class="w-full max-w-md">
+<div class="min-h-screen flex flex-col justify-center items-center bg-gray-800 text-white p-4">
+  <h1 class="text-2xl font-bold mb-8">Create Room</h1>
+
+  <div class="w-full max-w-md space-y-6">
+    <!-- Room name input -->
+    <div class="space-y-2">
+      <label for="roomName" class="block text-sm font-medium">
+        Room Name (3-20 alphanumeric characters)
+      </label>
       <input
+        id="roomName"
         type="text"
-        placeholder="Enter Room Name"
+        placeholder="Enter room name"
         bind:value={roomName}
-        class="w-full px-4 py-3 rounded-lg bg-gray-700 text-white mb-4"
+        maxlength="20"
+        disabled={isLoading}
+        class="w-full px-4 py-3 rounded-lg bg-gray-700 text-white border border-gray-600 focus:border-blue-500 outline-none"
       />
-      
-      {#if error}
-        <p class="text-red-500 text-sm mb-4">{error}</p>
-      {/if}
+      <p class="text-sm text-gray-400">
+        {roomName.length}/20 characters
+      </p>
+    </div>
 
-      <button
-        on:click={createRoom}
-        class="w-full bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-md"
-        disabled={!roomName}
+    <!-- Game mode dropdown -->
+    <div class="space-y-2">
+      <label for="gameMode" class="block text-sm font-medium">
+        Select Game Mode
+      </label>
+      <select
+        id="gameMode"
+        bind:value={selectedMode}
+        disabled={isLoading}
+        class="w-full px-4 py-3 rounded-lg bg-gray-700 text-white border border-gray-600 focus:border-blue-500 outline-none"
       >
+        {#each gameModes as mode}
+          <option value={mode.id}>
+            {mode.name}
+          </option>
+        {/each}
+      </select>
+    </div>
+
+    <!-- Error message -->
+    {#if error}
+      <p class="text-red-500 text-sm p-2 bg-red-500/10 rounded">
+        {error}
+      </p>
+    {/if}
+
+    <!-- Submit button -->
+    <button
+      on:click={handleSubmit}
+      disabled={!roomName.trim() || isLoading}
+      class="w-full bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+    >
+      {#if isLoading}
+        Creating Room...
+      {:else}
         Create Room
-      </button>
-    </div>
-  {:else}
-    <div class="text-center">
-      <h2 class="text-2xl mb-4">Room Created!</h2>
-      <div class="text-6xl font-bold mb-6">{roomCode}</div>
-      
-      <div class="space-y-4">
-        <button
-          on:click={copyToClipboard}
-          class="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-md w-full"
-        >
-          Copy Room Code
-        </button>
-
-        {#if copied}
-          <div class="text-green-400">Room code copied!</div>
-        {/if}
-
-        <button
-          on:click={startGame}
-          class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-md w-full mt-4"
-        >
-          Start Game
-        </button>
-      </div>
-    </div>
-  {/if}
+      {/if}
+    </button>
+  </div>
 </div>

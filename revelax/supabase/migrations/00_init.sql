@@ -1,19 +1,26 @@
--- rooms table
-create table rooms (
-  id uuid default uuid_generate_v4() primary key,
-  room_code text unique not null,
-  room_name text not null,
-  created_at timestamp with time zone default now(),
-  admin_id text not null,
-  is_active boolean default true
+-- Rooms table
+CREATE TABLE public.rooms (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    room_code TEXT UNIQUE NOT NULL,
+    room_name TEXT NOT NULL,
+    admin_id UUID NOT NULL,
+    game_mode TEXT NOT NULL DEFAULT 'classic',
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- players table
-create table players (
-  id uuid default uuid_generate_v4() primary key,
-  room_id uuid references rooms(id) on delete cascade,
-  user_id text not null,
-  username text not null,
-  is_connected boolean default true,
-  joined_at timestamp with time zone default now()
+-- Players table
+CREATE TABLE public.players (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    room_id UUID REFERENCES public.rooms(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL,
+    username TEXT NOT NULL,
+    is_admin BOOLEAN DEFAULT false,
+    is_connected BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+CREATE POLICY "Allow players to delete themselves"
+ON public.players
+FOR DELETE
+USING (auth.uid() IS NOT NULL);
