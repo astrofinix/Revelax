@@ -84,9 +84,11 @@
         });
 
       if (playerError) {
+        // Rollback room creation if player creation fails
         await supabase.from('rooms').delete().eq('id', room.id);
         throw playerError;
       }
+
       log('Admin player created successfully', 'success');
 
       // Store data for lobby
