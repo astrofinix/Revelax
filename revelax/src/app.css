@@ -175,12 +175,19 @@ main {
  
 @layer base {
   * {
-    @apply border-border;
+    /* @apply border-border; */
   }
   body {
-    @apply bg-background text-foreground;
+    /* @apply bg-background text-foreground; */
   }
 }
+
+/* @layer utilities {
+  .border-border {
+    border-color: var(--border);
+  }
+} */
+
 
 #card {
   width: 400px;
