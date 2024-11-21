@@ -1,14 +1,10 @@
+import { defineConfig } from 'vitest/config';
 import { sveltekit } from '@sveltejs/kit/vite';
-import { defineConfig } from 'vite';
 
 export default defineConfig({
-  plugins: [sveltekit()],
-  optimizeDeps: {
-    include: ['@supabase/supabase-js'],
-  },
-  resolve: {
-    alias: {
-      '@supabase/supabase-js': '@supabase/supabase-js/dist/module'
-    }
-  }
+	plugins: [sveltekit()],
+
+	test: {
+		include: ['src/**/*.{test,spec}.{js,ts}']
+	}
 });

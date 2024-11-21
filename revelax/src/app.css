@@ -1,3 +1,214 @@
-@import 'tailwindcss/base';
-@import 'tailwindcss/components';
-@import 'tailwindcss/utilities';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+ 
+:root {
+	--primary-color: #282c4c;
+	--secondary-color: #58546c;
+	--accent-color: #f05c14;
+	--accent-color-dark: #c22d13;
+
+	--font-base: 'Inter', sans-serif;
+	--font-mont: 'Montserrat', sans-serif;
+}
+
+html, body {
+	position: relative;
+	width: 100%;
+	height: 100%;
+  overflow: hidden;
+	font-family:var(--font-mont);
+}
+
+svg {
+  /* display: block; */
+  width: 130%;
+  margin: -10%;
+  height: 130%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+}
+
+.content {
+  position: relative;
+  z-index: 1; /* Ensure it stays above the SVG */
+  text-align: center;
+  color: white; /* Adjust color for better contrast with the gradient */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.aether-h1 {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+}
+
+/* body {
+  min-height: 100vh;
+  display: grid;
+  grid:
+    "main" 100vh
+    / auto;
+  place-items: center;
+} */
+
+body {
+	background-color: var(--primary-color);
+	color: var(--accent-color);
+	margin: 0;
+	padding: 8px;
+	box-sizing: border-box;
+}
+
+h1 {
+	font-family: var(--font-base);
+  font-size: 3em;
+	font-weight: 800; /* Bold */
+}
+
+.aether-h1 {
+  grid-area: main;
+  
+  /* font: 10vmin/0.8 "Libre Franklin"; */
+  font-weight: 700;
+  letter-spacing: -0.05em;
+  color: #fff4;
+  text-shadow: 0 0 5px #fff;
+  mix-blend-mode: overlay;
+}
+
+h2 {
+	font-family: var(--font-base);
+	font-weight: 600; /* Semi-Bold */
+}
+
+/* svg {
+  grid-area: main;
+  height: 100%;
+  width: 100%;
+} */
+
+
+main {
+  text-align: center;
+  padding: 1em;
+  max-width: 240px;
+  margin: 0 auto;
+}
+
+@media (min-width: 640px) {
+  main {
+    max-width: none;
+  }
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+ 
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+ 
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+ 
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+ 
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+ 
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+ 
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+ 
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+ 
+    --destructive: 0 72.2% 50.6%;
+    --destructive-foreground: 210 40% 98%;
+ 
+    --ring: 222.2 84% 4.9%;
+ 
+    --radius: 0.5rem;
+  }
+ 
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+ 
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+ 
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+ 
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+ 
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+ 
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+ 
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+ 
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+ 
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+ 
+    --ring: 212.7 26.8% 83.9%;
+  }
+}
+ 
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+#card {
+  width: 400px;
+  height: 400px;
+  background: yellow;
+  border-radius: 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1),
+    0 8px 10px -6px rgb(0 0 0 / 0.1);
+}
+
+#gloss {
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 1) 0%,
+    rgba(255, 255, 255, 0) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  will-change: opacity;
+  transition: 0.2s opacity ease-out;
+}
