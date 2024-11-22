@@ -1,6 +1,11 @@
 <script>
   import { goto } from '$app/navigation';
   import { supabase } from '$lib/supabaseClient';
+  import * as Card from '$lib/components/ui/card';
+  import { Button } from '$lib/components/ui/button';
+  import { Input } from '$lib/components/ui/input';
+  import { Label } from '$lib/components/ui/label';
+  import { Separator } from '$lib/components/ui/separator';
 
   let inviteCode = '';
   let error = '';
@@ -102,55 +107,97 @@
   }
 </script>
 
-<div class="min-h-screen flex flex-col justify-center items-center bg-gray-800 text-white p-4">
-  <h1 class="text-2xl font-bold mb-8">Join Room</h1>
-
-  <div class="w-full max-w-md space-y-6">
-    <!-- Invite code input -->
-    <div class="space-y-2">
-      <label for="inviteCode" class="block text-sm font-medium">
-        Enter 4-Digit Room Code
-      </label>
-      <input
-        id="inviteCode"
-        type="text"
-        placeholder="Enter room code"
-        bind:value={inviteCode}
-        maxlength="4"
-        disabled={isLoading}
-        class="w-full px-4 py-3 rounded-lg bg-gray-700 text-white border border-gray-600 focus:border-blue-500 outline-none text-center text-2xl tracking-widest"
-      />
-    </div>
-
-    <!-- Error message -->
-    {#if error}
-      <p class="text-red-500 text-sm p-2 bg-red-500/10 rounded">
-        {error}
-      </p>
-    {/if}
-
-    <!-- Join button -->
-    <button
-      on:click={handleJoin}
-      disabled={!inviteCode || isLoading}
-      class="w-full bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-    >
-      {#if isLoading}
-        Joining Room...
-      {:else}
+<div class="relative min-h-screen w-full bg-[#020202] flex items-center justify-center p-4">
+  <Card.Root class="w-full max-w-md bg-background/90">
+    <Card.Header>
+      <Card.Title class="text-2xl font-bold text-center text-foreground/90">
         Join Room
-      {/if}
-    </button>
+      </Card.Title>
+      <Card.Description class="text-center text-muted-foreground/70">
+        Enter the 4-digit room code to join
+      </Card.Description>
+    </Card.Header>
 
-    <!-- Create room link -->
-    <div class="text-center">
-      <p class="text-gray-400">Want to create your own room?</p>
-      <button
-        on:click={goToCreateRoom}
-        class="text-blue-400 hover:text-blue-300 font-medium mt-2"
+    <Card.Content class="space-y-4">
+      <div class="space-y-2">
+        <Label for="inviteCode" class="text-foreground/80">Room Code</Label>
+        <Input
+          id="inviteCode"
+          type="text"
+          placeholder="Enter room code"
+          bind:value={inviteCode}
+          maxlength="4"
+          disabled={isLoading}
+          class="w-full text-center text-2xl tracking-widest"
+        />
+      </div>
+
+      {#if error}
+        <div class="p-3 text-sm text-destructive/90 bg-destructive/5 rounded-md border border-destructive/20">
+          {error}
+        </div>
+      {/if}
+    </Card.Content>
+
+    <Card.Footer class="flex flex-col gap-2">
+      <Button
+        type="submit"
+        disabled={!inviteCode || isLoading}
+        class="w-full"
+        variant="default"
+        size="lg"
+        on:click={handleJoin}
       >
-        Click here
-      </button>
-    </div>
-  </div>
+        {isLoading ? 'Joining Room...' : 'Join Room'}
+      </Button>
+
+      <Separator class="my-2" />
+
+      <div class="text-center space-y-2">
+        <p class="text-muted-foreground/70">Want to create your own room?</p>
+        <Button
+          variant="ghost"
+          size="sm"
+          class="hover:bg-accent hover:text-accent-foreground"
+          on:click={goToCreateRoom}
+        >
+          Create Room
+        </Button>
+      </div>
+
+      <Button
+        variant="outline"
+        size="lg"
+        class="w-full"
+        on:click={() => history.back()}
+      >
+        Back
+      </Button>
+    </Card.Footer>
+  </Card.Root>
 </div>
+
+<style>
+  :global(body) {
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+    background-color: #020202;
+  }
+
+  /* Add animation for the card */
+  :global(.card) {
+    animation: fadeIn 0.5s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+</style>

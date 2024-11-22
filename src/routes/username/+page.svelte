@@ -1,4 +1,8 @@
 <script>
+  import * as Card from '$lib/components/ui/card';
+  import { Button } from '$lib/components/ui/button';
+  import { Input } from '$lib/components/ui/input';
+  import { Label } from '$lib/components/ui/label';
   import { goto } from '$app/navigation';
 
   let username = '';
@@ -72,44 +76,85 @@
   }
 </script>
 
-<div class="min-h-screen flex flex-col justify-center items-center bg-gray-800 text-white p-4">
-  <h1 class="text-2xl font-bold mb-8">Choose Your Username</h1>
+<div class="relative min-h-screen w-full bg-[#020202] flex items-center justify-center p-4">
+  <Card.Root class="w-full max-w-md bg-background/90">
+    <Card.Header>
+      <Card.Title class="text-2xl font-bold text-center">
+        Choose Your Username
+      </Card.Title>
+      <Card.Description class="text-center">
+        Enter a username to continue
+      </Card.Description>
+    </Card.Header>
 
-  <div class="w-full max-w-md space-y-4">
-    <!-- Username input -->
-    <div class="space-y-2">
-      <label for="username" class="block text-sm font-medium">
-        Username
-      </label>
-      <input
-        id="username"
-        type="text"
-        placeholder="Enter username"
-        bind:value={username}
-        maxlength="20"
+    <Card.Content class="space-y-4">
+      <div class="space-y-2">
+        <Label for="username">Username</Label>
+        <Input
+          id="username"
+          type="text"
+          placeholder="Enter username"
+          bind:value={username}
+          maxlength="20"
+          disabled={isLoading}
+        />
+        <p class="text-sm text-muted-foreground text-right">
+          {username.length}/20 characters
+        </p>
+      </div>
+
+      {#if error}
+        <div class="p-3 text-sm text-destructive bg-destructive/10 rounded-md">
+          {error}
+        </div>
+      {/if}
+    </Card.Content>
+
+    <Card.Footer class="flex flex-col gap-2">
+      <Button
+        type="submit"
         disabled={isLoading}
-        class="w-full px-4 py-3 rounded-lg bg-gray-700 text-white border border-gray-600 focus:border-blue-500 outline-none"
-      />
-      <p class="text-sm text-gray-400">
-        {username.length}/20 characters
-      </p>
-    </div>
+        class="w-full"
+        variant="default"
+        size="lg"
+        on:click={handleSubmit}
+      >
+        {isLoading ? 'Saving...' : 'Continue'}
+      </Button>
 
-    <!-- Error message -->
-    {#if error}
-      <p class="text-red-500 text-sm p-2 bg-red-500/10 rounded">
-        {error}
-      </p>
-    {/if}
-
-    <!-- Submit button -->
-    <button
-      type="submit"
-      disabled={isLoading}
-      class="w-full px-4 py-3 rounded-lg bg-blue-500 text-white font-medium hover:bg-blue-600 transition duration-300"
-      on:click={handleSubmit}
-    >
-      {isLoading ? 'Saving...' : 'Save'}
-    </button>
-  </div>
+      <Button
+        variant="outline"
+        size="lg"
+        class="w-full"
+        on:click={() => history.back()}
+      >
+        Back
+      </Button>
+    </Card.Footer>
+  </Card.Root>
 </div>
+
+<style>
+  :global(body) {
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+    background-color: #020202;
+  }
+
+  /* Add animation for the card */
+  :global(.card) {
+    animation: fadeIn 0.5s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+</style>

@@ -1,9 +1,12 @@
+@import url('https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
  
 @layer base {
   :root {
+    font-family: 'Rubik', sans-serif;
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
     --card: 0 0% 100%;
@@ -25,7 +28,12 @@
     --ring: 222.2 84% 4.9%;
     --radius: 0.5rem;
   }
- 
+
+  /* Add this to ensure all text uses Rubik by default */
+  html {
+    font-family: 'Rubik', sans-serif;
+  }
+
   .dark {
     --background: 222.2 84% 4.9%;
     --foreground: 210 40% 98%;
