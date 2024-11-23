@@ -3,37 +3,39 @@
   import * as Card from '$lib/components/ui/card';
   import { Button } from '$lib/components/ui/button';
   import { Separator } from '$lib/components/ui/separator';
+  import { onMount } from 'svelte';
+
+  onMount(() => {
+    // Always use dark mode
+    document.documentElement.classList.add('dark');
+  });
 
   function handleRoomAction(action) {
-    // Set the room action in localStorage
     localStorage.setItem('roomAction', action);
-    // Navigate to username page
     goto('/username');
   }
 </script>
 
-<div class="relative min-h-screen w-full bg-[#020202]">
+<div class="relative min-h-screen w-full bg-background">
   <!-- Animated Background -->
   <div class="absolute inset-0 w-full h-full">
     <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice">
       <defs>
-         <radialGradient id="Gradient2" cx="50%" cy="50%" fx="10%" fy="50%" r=".5">
+        <radialGradient id="Gradient2" cx="50%" cy="50%" fx="10%" fy="50%" r=".5">
           <animate attributeName="fx" dur="23.5s" values="0%;3%;0%" repeatCount="indefinite" />
-          <stop offset="0%" stop-color="#df4a2b" />
-          <stop offset="100%" stop-color="#df4a2b00" />
+          <stop offset="0%" stop-color="hsl(300 100% 50%)" />
+          <stop offset="100%" stop-color="hsl(300 100% 50% / 0)" />
         </radialGradient>
         <radialGradient id="Gradient3" cx="50%" cy="50%" fx="50%" fy="50%" r=".5">
           <animate attributeName="fx" dur="21.5s" values="0%;3%;0%" repeatCount="indefinite" />
-          <stop offset="0%" stop-color="#f6bd3a" />
-          <stop offset="100%" stop-color="#f6bd3a00" />
+          <stop offset="0%" stop-color="hsl(180 100% 50%)" />
+          <stop offset="100%" stop-color="hsl(180 100% 50% / 0)" />
         </radialGradient>
         <radialGradient id="Gradient1" cx="50%" cy="50%" fx="10%" fy="50%" r=".5">
           <animate attributeName="fx" dur="34s" values="0%;3%;0%" repeatCount="indefinite" />
-          <stop offset="0%" stop-color="#4658a7" />
-          <stop offset="100%" stop-color="#4658a700" />
+          <stop offset="0%" stop-color="hsl(60 100% 50%)" />
+          <stop offset="100%" stop-color="hsl(60 100% 50% / 0)" />
         </radialGradient>
-
-        
       </defs>
       <rect x="0" y="0" width="100%" height="100%" fill="url(#Gradient3)">
         <animate attributeName="x" dur="25s" values="0%;25%;0%" repeatCount="indefinite" />
@@ -56,13 +58,13 @@
 
   <!-- Content -->
   <div class="relative z-10 min-h-screen flex items-center justify-center p-4">
-    <Card.Root class="w-full max-w-md backdrop-blur-md bg-background/80">
-      <Card.Header>
-        <Card.Title class="text-4xl font-bold tracking-tight text-foreground text-center">
+    <Card.Root class="w-full max-w-md bg-card/95 backdrop-blur-lg border border-border">
+      <Card.Header class="space-y-2">
+        <Card.Title class="text-4xl font-bold tracking-tight text-card-foreground text-center">
           Revelax
         </Card.Title>
-        <Card.Description class="text-center">
-          Choose your path to begin
+        <Card.Description class="text-center text-muted-foreground">
+          Where conversations begin.
         </Card.Description>
       </Card.Header>
 
@@ -70,18 +72,18 @@
         <Button 
           variant="default"
           size="lg"
-          class="w-full text-lg py-6"
+          class="w-full text-lg py-6 bg-primary text-primary-foreground hover:bg-primary/90"
           on:click={() => handleRoomAction('create')}
         >
           Create Room
         </Button>
         
-        <Separator />
+        <Separator class="bg-border" />
         
         <Button 
           variant="secondary"
           size="lg"
-          class="w-full text-lg py-6"
+          class="w-full text-lg py-6 bg-secondary text-secondary-foreground hover:bg-secondary/80"
           on:click={() => handleRoomAction('join')}
         >
           Join Room
@@ -96,7 +98,8 @@
     margin: 0;
     padding: 0;
     overflow-x: hidden;
-    background-color: #020202;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
   }
 
   svg {
@@ -106,8 +109,10 @@
     opacity: 0.7;
   }
 
-  /* Add animation for the card */
   :global(.card) {
+    background-color: hsl(var(--card));
+    color: hsl(var(--card-foreground));
+    border: 1px solid hsl(var(--border));
     animation: fadeIn 0.5s ease-out;
   }
 

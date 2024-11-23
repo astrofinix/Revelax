@@ -4,10 +4,16 @@
   import { Input } from '$lib/components/ui/input';
   import { Label } from '$lib/components/ui/label';
   import { goto } from '$app/navigation';
+  import { onMount } from 'svelte';
 
   let username = '';
   let error = '';
   let isLoading = false;
+
+  onMount(() => {
+    // Always use dark mode
+    document.documentElement.classList.add('dark');
+  });
 
   function log(message, type = 'info') {
     const styles = {
@@ -41,7 +47,6 @@
         log(`Invalid username format: ${username}`, 'error');
         return;
       }
-
       // Get previous username if exists
       const previousUsername = localStorage.getItem('username');
       if (previousUsername) {
@@ -76,20 +81,20 @@
   }
 </script>
 
-<div class="relative min-h-screen w-full bg-[#020202] flex items-center justify-center p-4">
-  <Card.Root class="w-full max-w-md bg-background/90">
+<div class="relative min-h-screen w-full bg-background flex items-center justify-center p-4">
+  <Card.Root class="w-full max-w-md bg-card/95 backdrop-blur-lg border border-border">
     <Card.Header>
-      <Card.Title class="text-2xl font-bold text-center">
+      <Card.Title class="text-2xl font-bold text-center text-card-foreground">
         Choose Your Username
       </Card.Title>
-      <Card.Description class="text-center">
+      <Card.Description class="text-center text-muted-foreground">
         Enter a username to continue
       </Card.Description>
     </Card.Header>
 
     <Card.Content class="space-y-4">
       <div class="space-y-2">
-        <Label for="username">Username</Label>
+        <Label for="username" class="text-foreground">Username</Label>
         <Input
           id="username"
           type="text"
@@ -97,6 +102,7 @@
           bind:value={username}
           maxlength="20"
           disabled={isLoading}
+          class="bg-background border-input text-foreground placeholder:text-muted-foreground"
         />
         <p class="text-sm text-muted-foreground text-right">
           {username.length}/20 characters
@@ -104,7 +110,7 @@
       </div>
 
       {#if error}
-        <div class="p-3 text-sm text-destructive bg-destructive/10 rounded-md">
+        <div class="p-3 text-sm text-destructive-foreground bg-destructive/10 rounded-md border border-destructive/20">
           {error}
         </div>
       {/if}
@@ -114,7 +120,7 @@
       <Button
         type="submit"
         disabled={isLoading}
-        class="w-full"
+        class="w-full bg-primary text-primary-foreground hover:bg-primary/90"
         variant="default"
         size="lg"
         on:click={handleSubmit}
@@ -125,7 +131,7 @@
       <Button
         variant="outline"
         size="lg"
-        class="w-full"
+        class="w-full border-border text-foreground hover:bg-accent hover:text-accent-foreground"
         on:click={() => history.back()}
       >
         Back
@@ -139,12 +145,31 @@
     margin: 0;
     padding: 0;
     overflow-x: hidden;
-    background-color: #020202;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
   }
 
-  /* Add animation for the card */
   :global(.card) {
+    background-color: hsl(var(--card));
+    color: hsl(var(--card-foreground));
+    border: 1px solid hsl(var(--border));
     animation: fadeIn 0.5s ease-out;
+  }
+
+  :global(.input) {
+    background-color: hsl(var(--background));
+    border-color: hsl(var(--input));
+    color: hsl(var(--foreground));
+  }
+
+  :global(.input:focus) {
+    outline: none;
+    ring-color: hsl(var(--ring));
+    border-color: hsl(var(--ring));
+  }
+
+  :global(.input::placeholder) {
+    color: hsl(var(--muted-foreground));
   }
 
   @keyframes fadeIn {
@@ -158,3 +183,4 @@
     }
   }
 </style>
+

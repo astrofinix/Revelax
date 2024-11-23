@@ -11,6 +11,8 @@
   let error = '';
   let isLoading = false;
 
+  const MAX_PLAYERS = 8; // Define maximum players allowed
+
   function log(message, type = 'info') {
     const styles = {
       info: '📘 [join-room]',
@@ -68,6 +70,23 @@
         return;
       }
 
+      // Check current number of players in the room
+      const { data: players, error: playersError } = await supabase
+        .from('players')
+        .select('id')
+        .eq('room_id', room.id);
+
+      if (playersError) {
+        throw playersError;
+      }
+
+      // Check if room is full
+      if (players && players.length >= MAX_PLAYERS) {
+        error = `Room is full (${MAX_PLAYERS} players maximum)`;
+        log('Room is full', 'error');
+        return;
+      }
+
       // Create player entry
       const userId = crypto.randomUUID();
       const { error: playerError } = await supabase
@@ -107,8 +126,8 @@
   }
 </script>
 
-<div class="relative min-h-screen w-full bg-[#020202] flex items-center justify-center p-4">
-  <Card.Root class="w-full max-w-md bg-background/90">
+<div class="relative min-h-screen w-full bg-background flex items-center justify-center p-4">
+  <Card.Root class="w-full max-w-md bg-card/95 backdrop-blur-lg border border-border">
     <Card.Header>
       <Card.Title class="text-2xl font-bold text-center text-foreground/90">
         Join Room
@@ -130,10 +149,13 @@
           disabled={isLoading}
           class="w-full text-center text-2xl tracking-widest"
         />
+        <p class="text-xs text-muted-foreground text-center">
+          Maximum {MAX_PLAYERS} players per room
+        </p>
       </div>
 
       {#if error}
-        <div class="p-3 text-sm text-destructive/90 bg-destructive/5 rounded-md border border-destructive/20">
+        <div class="p-3 text-sm text-destructive/90 bg-destructive/5 rounded-md border border-destructive/20 animate-in fade-in-50">
           {error}
         </div>
       {/if}
@@ -182,12 +204,31 @@
     margin: 0;
     padding: 0;
     overflow-x: hidden;
-    background-color: #020202;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
   }
 
-  /* Add animation for the card */
   :global(.card) {
+    background-color: hsl(var(--card));
+    color: hsl(var(--card-foreground));
+    border: 1px solid hsl(var(--border));
     animation: fadeIn 0.5s ease-out;
+  }
+
+  :global(.input) {
+    background-color: hsl(var(--background));
+    border-color: hsl(var(--input));
+    color: hsl(var(--foreground));
+  }
+
+  :global(.input:focus) {
+    outline: none;
+    ring-color: hsl(var(--ring));
+    border-color: hsl(var(--ring));
+  }
+
+  :global(.input::placeholder) {
+    color: hsl(var(--muted-foreground));
   }
 
   @keyframes fadeIn {

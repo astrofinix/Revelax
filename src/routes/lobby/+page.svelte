@@ -1,341 +1,482 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import { goto } from '$app/navigation';
   import { supabase } from '$lib/supabaseClient';
+  import { goto } from '$app/navigation';
   import * as Card from '$lib/components/ui/card';
   import { Button } from '$lib/components/ui/button';
+  import { Separator } from '$lib/components/ui/separator';
+  import { Copy } from 'lucide-svelte';
+  import { browser } from '$app/environment';
+  import * as Dialog from "$lib/components/ui/dialog";
+  import { Badge } from "$lib/components/ui/badge";
+  import { Users, Crown } from 'lucide-svelte';
 
-  let roomName = '';
-  let gameMode = '';
-  let roomCode = '';
   let players = [];
+  let roomData = null;
+  let isReady = false;
   let error = '';
-  let isLoading = true;
-  let copySuccess = false;
-  let isAdmin = false;
-  let refreshInterval;
-  let subscription;
-  let isLeavingVoluntarily = false;
+  let isLoading = false;
+  let userId = browser ? localStorage.getItem('userId') : null;
+  let roomId = browser ? localStorage.getItem('roomId') : null;
+  let roomCode = browser ? localStorage.getItem('currentRoomCode') : null;
+  let updateInterval;
+  let showLeaveConfirm = false;
 
-  function log(message, type = 'info') {
-    const styles = {
-      info: '📘 [lobby]',
-      error: '🔴 [lobby]',
-      success: '✅ [lobby]'
-    };
-    console.log(`${styles[type]} ${message}`);
+  // Enhanced subscription with multiple channels
+  const playersSubscription = supabase
+    .channel('lobby_channel')
+    .on('postgres_changes', { 
+      event: '*', 
+      schema: 'public', 
+      table: 'players',
+      filter: `room_id=eq.${roomId}`
+    }, handlePlayerChange)
+    .on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'rooms',
+      filter: `id=eq.${roomId}`
+    }, handleRoomChange)
+    .subscribe();
+
+  // Add reactive statement for player state
+  $: {
+    if (players.length > 0) {
+      const currentPlayer = players.find(p => p.user_id === userId);
+      if (currentPlayer) {
+        isReady = currentPlayer.is_ready;
+      }
+    }
   }
 
-  async function fetchRoomDetails() {
+  onMount(async () => {
+    if (!userId || !roomId) {
+      goto('/');
+      return;
+    }
+    await Promise.all([
+      loadRoom(),
+      loadPlayers()
+    ]);
+    setupPresence();
+    
+    // Check initial ready state
+    const currentPlayer = players.find(p => p.user_id === userId);
+    if (currentPlayer) {
+      isReady = currentPlayer.is_ready;
+    }
+
+    // More frequent updates for player states
+    updateInterval = setInterval(async () => {
+      await Promise.all([
+        loadPlayers(),
+        loadRoom(),
+        checkAllPlayersReady()
+      ]);
+    }, 1500); // Update every 1.5 seconds for smoother experience
+
+    // Always set dark mode
+    document.documentElement.classList.add('dark');
+    document.body.style.backgroundColor = '#020202';
+  });
+
+  async function handlePlayerChange() {
+    await loadPlayers();
+    await checkAllPlayersReady();
+  }
+
+  async function handleRoomChange() {
+    await loadRoom();
+    if (roomData?.status === 'in_game' && roomData?.game_session_id) {
+      // Store game session ID before redirecting
+      localStorage.setItem('gameSessionId', roomData.game_session_id);
+      goto('/game-room');
+    }
+  }
+
+  async function loadRoom() {
+    const { data, error: roomError } = await supabase
+      .from('rooms')
+      .select('*')
+      .eq('id', roomId)
+      .single();
+
+    if (roomError) {
+      console.error('Error loading room:', roomError);
+      return;
+    }
+
+    roomData = data;
+  }
+
+  async function loadPlayers() {
+    const { data, error: playersError } = await supabase
+      .from('players')
+      .select('*')
+      .eq('room_id', roomId)
+      .order('created_at');
+
+    if (playersError) {
+      console.error('Error loading players:', playersError);
+      return;
+    }
+
+    players = data;
+  }
+
+  async function checkAllPlayersReady() {
+    if (!players.length || players.length < 2) {
+      return false;
+    }
+    
+    const allReady = players.every(p => p.is_ready);
+    const readyCount = players.filter(p => p.is_ready).length;
+    
+    // Update UI with ready count
+    const totalPlayers = players.length;
+    const readyStatus = `${readyCount}/${totalPlayers} players ready`;
+    
+    // If all players are ready, admin initiates game start
+    if (allReady && roomData?.admin_id === userId) {
+      await startGame();
+    }
+    
+    return allReady;
+  }
+
+  async function toggleReady() {
     try {
-      const roomId = localStorage.getItem('roomId');
-      const userId = localStorage.getItem('userId');
+      isLoading = true;
+      isReady = !isReady;
       
-      if (!roomId) {
-        log('No room ID found', 'error');
-        goto('/');
-        return;
-      }
-
-      // Fetch room details
-      const { data: room, error: roomError } = await supabase
-        .from('rooms')
-        .select('room_name, room_code, game_mode')
-        .eq('id', roomId)
-        .single();
-
-      if (roomError) throw roomError;
-
-      roomName = room.room_name;
-      gameMode = room.game_mode;
-      roomCode = room.room_code;
-
-      // Fetch players with user_id
-      const { data: playerList, error: playerError } = await supabase
+      const { error: updateError } = await supabase
         .from('players')
-        .select('username, is_admin, user_id')
-        .eq('room_id', roomId)
-        .order('created_at', { ascending: true });
+        .update({ is_ready: isReady })
+        .eq('user_id', userId)
+        .eq('room_id', roomId);
 
-      if (playerError) throw playerError;
-      
-      players = playerList;
-      isAdmin = players.some(player => player.user_id === userId && player.is_admin);
+      if (updateError) throw updateError;
 
-      log('Room details fetched successfully', 'success');
     } catch (err) {
-      log(`Error fetching room details: ${err.message}`, 'error');
-      error = 'Failed to load room details';
+      console.error('Error toggling ready state:', err);
+      error = 'Failed to update ready state';
+      isReady = !isReady; // Revert the state
     } finally {
       isLoading = false;
     }
   }
 
-  async function copyRoomCode() {
-    try {
-      await navigator.clipboard.writeText(roomCode);
-      copySuccess = true;
-      setTimeout(() => copySuccess = false, 2000);
-      log('Room code copied to clipboard', 'success');
-    } catch (err) {
-      log(`Error copying room code: ${err.message}`, 'error');
+  function generateCardSequence(gameMode) {
+    // Get the number of cards based on game mode
+    const cardCounts = {
+      'fil_chill': 20,
+      'yap_sesh': 25,
+      'night_talk': 30
+    };
+    
+    const count = cardCounts[gameMode] || 20;
+    const sequence = Array.from({length: count}, (_, i) => i + 1);
+    
+    // Fisher-Yates shuffle
+    for (let i = sequence.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [sequence[i], sequence[j]] = [sequence[j], sequence[i]];
     }
-  }
-
-  async function leaveRoom() {
-    try {
-      isLeavingVoluntarily = true;
-      log('Attempting to leave room...', 'info');
-      const userId = localStorage.getItem('userId');
-      const roomId = localStorage.getItem('roomId');
-
-      if (!userId || !roomId) {
-        log('No user ID or room ID found', 'error');
-        goto('/');
-        return;
-      }
-
-      // Check if current user is admin
-      const { data: currentPlayer } = await supabase
-        .from('players')
-        .select('is_admin')
-        .match({ user_id: userId, room_id: roomId })
-        .single();
-
-      if (currentPlayer?.is_admin) {
-        // Get remaining players
-        const { data: remainingPlayers } = await supabase
-          .from('players')
-          .select('user_id')
-          .eq('room_id', roomId)
-          .neq('user_id', userId);
-
-        if (remainingPlayers && remainingPlayers.length > 0) {
-          // Assign new admin
-          const newAdmin = remainingPlayers[Math.floor(Math.random() * remainingPlayers.length)];
-          
-          await supabase
-            .from('players')
-            .update({ is_admin: true })
-            .match({ user_id: newAdmin.user_id, room_id: roomId });
-          
-          log('New admin assigned', 'success');
-        } else {
-          // Only delete room if no players are left
-          await supabase
-            .from('rooms')
-            .delete()
-            .match({ id: roomId });
-            
-          log('Room deleted - no players remaining', 'info');
-        }
-      }
-
-      // Delete only the current player
-      await supabase
-        .from('players')
-        .delete()
-        .match({ user_id: userId, room_id: roomId });
-
-      log('Player removed from room', 'success');
-
-      // Clear only the current user's local storage
-      localStorage.removeItem('userId');
-      localStorage.removeItem('roomId');
-      localStorage.removeItem('currentRoomCode');
-
-      // Navigate to home
-      goto('/');
-
-    } catch (err) {
-      log(`Error leaving room: ${err.message}`, 'error');
-      error = 'Failed to leave room. Please try again.';
-      isLeavingVoluntarily = false;
-    }
+    
+    return sequence;
   }
 
   async function startGame() {
     try {
-      const roomId = localStorage.getItem('roomId');
-      // Add your game start logic here
-      log('Starting game...', 'info');
-      goto(`/game/${roomId}`); // Adjust the route as needed
+      isLoading = true;
+      error = '';
+
+      // Generate card sequence
+      const sequence = generateCardSequence(roomData.game_mode);
+      
+      // Create game session with initial state
+      const { data: gameSession, error: sessionError } = await supabase
+        .from('game_sessions')
+        .insert({
+          room_id: roomId,
+          card_sequence: sequence,
+          current_player_index: 0,
+          current_card_index: 0,
+          is_active: true
+        })
+        .select()
+        .single();
+
+      if (sessionError) throw sessionError;
+
+      // Update room status to trigger all players to redirect
+      const { error: roomError } = await supabase
+        .from('rooms')
+        .update({ 
+          game_session_id: gameSession.id,
+          status: 'in_game'
+        })
+        .eq('id', roomId);
+
+      if (roomError) throw roomError;
+
+      // Store game session ID for the game room
+      localStorage.setItem('gameSessionId', gameSession.id);
+      
+      // Update the redirect here too
+      goto('/game-room');
+
     } catch (err) {
-      log(`Error starting game: ${err.message}`, 'error');
+      console.error('Error starting game:', err);
       error = 'Failed to start game. Please try again.';
+    } finally {
+      isLoading = false;
     }
   }
 
-  function setupRealtimeSubscription() {
-    const roomId = localStorage.getItem('roomId');
-    const userId = localStorage.getItem('userId');
-    
-    if (!roomId || !userId) return;
-
-    subscription = supabase
-      .channel(`room:${roomId}`)
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'players',
-        filter: `room_id=eq.${roomId}`
-      }, async (payload) => {
-        log(`Player change detected: ${payload.eventType}`, 'info');
-        
-        // Only check for room existence and update player list
-        const { data: room } = await supabase
-          .from('rooms')
-          .select('id')
-          .eq('id', roomId)
-          .single();
-
-        if (!room) {
-          // Only redirect if the room is actually gone
-          if (isLeavingVoluntarily) {
-            goto('/');
-          }
-          return;
-        }
-
-        // Update player list without redirecting
-        fetchRoomDetails();
-      })
-      .subscribe();
+  function setupPresence() {
+    // Your existing presence code
   }
-
-  // Set up real-time subscription for players
-  onMount(async () => {
-    const roomId = localStorage.getItem('roomId');
-    const userId = localStorage.getItem('userId');
-
-    if (!roomId || !userId) {
-      goto('/');
-      return;
-    }
-
-    // Initial room check
-    const { data: room } = await supabase
-      .from('rooms')
-      .select('id')
-      .eq('id', roomId)
-      .single();
-
-    if (!room) {
-      goto('/');
-      return;
-    }
-
-    // Initial player check
-    const { data: player } = await supabase
-      .from('players')
-      .select('id')
-      .match({ user_id: userId, room_id: roomId })
-      .single();
-
-    if (!player) {
-      goto('/');
-      return;
-    }
-
-    await fetchRoomDetails();
-    setupRealtimeSubscription();
-
-    // Set up periodic refresh
-    refreshInterval = setInterval(() => {
-      fetchRoomDetails();
-    }, 5000);
-  });
 
   onDestroy(() => {
-    // Clean up
-    if (refreshInterval) clearInterval(refreshInterval);
-    if (subscription) subscription.unsubscribe();
-    isLeavingVoluntarily = false;
+    playersSubscription.unsubscribe();
+    if (updateInterval) clearInterval(updateInterval);
   });
+
+  async function copyRoomCode() {
+    try {
+      await navigator.clipboard.writeText(roomCode);
+      const originalError = error;
+      error = 'Room code copied! ✨';
+      setTimeout(() => {
+        error = originalError;
+      }, 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+      error = 'Failed to copy room code';
+    }
+  }
+
+  async function handleLeaveRoom() {
+    try {
+      isLoading = true;
+      
+      // If admin is leaving, transfer admin rights
+      if (userId === roomData?.admin_id && players.length > 1) {
+        const nextAdmin = players.find(p => p.user_id !== userId);
+        if (nextAdmin) {
+          const { error: adminError } = await supabase
+            .from('rooms')
+            .update({ admin_id: nextAdmin.user_id })
+            .eq('id', roomId);
+          
+          if (adminError) throw adminError;
+        }
+      }
+
+      const { error: leaveError } = await supabase
+        .from('players')
+        .delete()
+        .eq('user_id', userId)
+        .eq('room_id', roomId);
+      
+      if (leaveError) throw leaveError;
+      
+      localStorage.removeItem('roomId');
+      localStorage.removeItem('currentRoomCode');
+      goto('/');
+    } catch (err) {
+      console.error('Error leaving room:', err);
+      error = 'Failed to leave room. Please try again.';
+    } finally {
+      isLoading = false;
+      showLeaveConfirm = false;
+    }
+  }
 </script>
 
-<div class="min-h-screen bg-background p-4">
-  <div class="max-w-2xl mx-auto space-y-8">
-    {#if isLoading}
-      <Card.Root>
-        <Card.Header>
-          <div class="h-8 bg-muted animate-pulse rounded" />
-        </Card.Header>
-        <Card.Content>
-          <div class="space-y-4">
-            <div class="h-4 bg-muted animate-pulse rounded" />
-            <div class="h-12 bg-muted animate-pulse rounded" />
-          </div>
-        </Card.Content>
-      </Card.Root>
-    {:else}
-      <!-- Room Details -->
-      <Card.Root>
-        <Card.Header>
-          <Card.Title>{roomName}</Card.Title>
-          <Card.Description>Category: {gameMode}</Card.Description>
-        </Card.Header>
-        <Card.Content>
-          <div class="flex items-center justify-between p-3 bg-muted rounded-md">
-            <code class="text-sm font-mono">Room Code: {roomCode}</code>
-            <Button 
-              variant="secondary" 
-              size="sm"
-              on:click={copyRoomCode}
-            >
-              {copySuccess ? '✓ Copied!' : 'Copy'}
-            </Button>
-          </div>
-        </Card.Content>
-      </Card.Root>
+<div class="relative min-h-screen w-full bg-background flex items-center justify-center p-4">
+  <Card.Root class="w-full max-w-md bg-card/95 backdrop-blur-lg border border-border">
+    <Card.Header class="space-y-4">
+      <Card.Title class="text-3xl font-bold text-center text-card-foreground">
+        Lobby
+      </Card.Title>
+      
+      <!-- Room Info -->
+      <div class="flex flex-col items-center gap-2">
+        <h2 class="text-xl font-semibold text-foreground">
+          {roomData?.room_name || 'Loading...'}
+        </h2>
+        
+        <Badge variant="outline" class="px-4 py-1.5 text-lg bg-background/50">
+          Room Code: {roomCode}
+          <Button
+            variant="ghost"
+            size="icon"
+            class="h-6 w-6 ml-2 hover:text-primary"
+            on:click={copyRoomCode}
+          >
+            <Copy class="h-4 w-4" />
+            <span class="sr-only">Copy room code</span>
+          </Button>
+        </Badge>
+      </div>
+    </Card.Header>
 
-      <!-- Players List -->
-      <Card.Root>
-        <Card.Header>
-          <Card.Title>Players ({players.length})</Card.Title>
-        </Card.Header>
-        <Card.Content class="space-y-2">
-          {#each players as player}
-            <div class="flex items-center justify-between p-3 bg-muted rounded-md">
-              <span>{player.username}</span>
-              {#if player.is_admin}
-                <span class="text-xs bg-primary text-primary-foreground px-2 py-1 rounded">
-                  Admin
-                </span>
-              {/if}
-            </div>
-          {/each}
-        </Card.Content>
-      </Card.Root>
-
-      <!-- Start Game Button (Admin only) -->
-      {#if isAdmin}
-        <Button
-          variant="default"
-          size="lg"
-          class="w-full"
-          on:click={startGame}
+    <Card.Content class="space-y-6">
+      <!-- Enhanced Game Mode Badge -->
+      <div class="text-center space-y-2">
+        <Badge 
+          variant="secondary" 
+          class="text-base px-4 py-1.5"
         >
-          Start Game
-        </Button>
-      {/if}
+          {#if roomData?.game_mode === 'fil_chill'}
+            🍻 The Filipino Chillnuman
+          {:else if roomData?.game_mode === 'yap_sesh'}
+            💭 Yap Session
+          {:else if roomData?.game_mode === 'night_talk'}
+            🌙 Deep Night Talks
+          {/if}
+        </Badge>
+      </div>
 
-      <!-- Error Message -->
+      <Separator />
+
+      <!-- Player List Header -->
+      <div class="flex items-center gap-2 text-muted-foreground">
+        <Users class="h-5 w-5" />
+        <span>Players ({players.length})</span>
+      </div>
+
+      <!-- Enhanced Player List -->
+      <div class="space-y-2 max-h-[200px] overflow-y-auto pr-2">
+        {#each players as player}
+          <div class="flex items-center justify-between p-3 rounded-lg transition-all duration-200 
+                    {player.user_id === userId 
+                      ? 'bg-primary/20 border border-primary/30' 
+                      : 'bg-accent hover:bg-accent/80'}">
+            <div class="flex items-center gap-3">
+              {#if player.user_id === roomData?.admin_id}
+                <Crown class="h-4 w-4 text-yellow-500" />
+              {/if}
+              <span class={player.user_id === userId ? 'font-semibold' : ''}>
+                {player.username}
+                {#if player.user_id === userId}
+                  <span class="text-xs text-muted-foreground">(You)</span>
+                {/if}
+              </span>
+            </div>
+            <Badge 
+              variant={player.is_ready ? "success" : "secondary"} 
+              class="text-xs animate-in fade-in-50 duration-300"
+            >
+              {player.is_ready ? '✓ Ready' : '⋯ Waiting'}
+            </Badge>
+          </div>
+        {/each}
+      </div>
+
+      <!-- Error Display -->
       {#if error}
-        <div class="p-3 text-sm text-destructive bg-destructive/10 rounded-md">
+        <div class="p-3 text-sm text-destructive bg-destructive/10 rounded-md animate-in fade-in-50">
           {error}
         </div>
       {/if}
+    </Card.Content>
 
-      <!-- Leave Room Button -->
+    <Card.Footer class="flex flex-col gap-2">
       <Button
-        variant="destructive"
+        variant="default"
         size="lg"
-        class="w-full"
-        on:click={leaveRoom}
+        class="w-full {isReady ? 'bg-primary hover:bg-primary/90' : ''}"
+        disabled={isLoading}
+        on:click={toggleReady}
+      >
+        {#if isLoading}
+          <span class="animate-pulse">Loading...</span>
+        {:else if isReady && players.every(p => p.is_ready)}
+          <span class="animate-pulse">Starting Game...</span>
+        {:else if isReady}
+          ✓ Ready - Waiting for others...
+        {:else}
+          Ready Up
+        {/if}
+      </Button>
+
+      <Button
+        variant="outline"
+        size="lg"
+        class="w-full hover:bg-destructive hover:text-destructive-foreground"
+        disabled={isLoading}
+        on:click={() => showLeaveConfirm = true}
       >
         Leave Room
       </Button>
-    {/if}
-  </div>
+    </Card.Footer>
+  </Card.Root>
 </div>
+
+<!-- Leave Confirmation Dialog -->
+<Dialog.Root bind:open={showLeaveConfirm}>
+  <Dialog.Content class="bg-background border-border">
+    <Dialog.Header>
+      <Dialog.Title class="text-foreground">Leave Room</Dialog.Title>
+      <Dialog.Description class="text-muted-foreground">
+        Are you sure you want to leave this room? 
+        {#if userId === roomData?.admin_id && players.length > 1}
+          Admin rights will be transferred to another player.
+        {/if}
+      </Dialog.Description>
+    </Dialog.Header>
+    <Dialog.Footer class="flex gap-2">
+      <Button variant="outline" on:click={() => showLeaveConfirm = false}>
+        Cancel
+      </Button>
+      <Button variant="destructive" on:click={handleLeaveRoom} disabled={isLoading}>
+        {isLoading ? 'Leaving...' : 'Leave Room'}
+      </Button>
+    </Dialog.Footer>
+  </Dialog.Content>
+</Dialog.Root>
+
+<style>
+  :global(body) {
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+  }
+
+  :global(.card) {
+    background-color: hsl(var(--card));
+    color: hsl(var(--card-foreground));
+    border: 1px solid hsl(var(--border));
+    animation: fadeIn 0.5s ease-out;
+  }
+
+  /* Scrollbar styles */
+  div::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  div::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  div::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--primary) / 0.2);
+    border-radius: 20px;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+</style>

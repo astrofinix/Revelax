@@ -111,8 +111,8 @@
   }
 </script>
 
-<div class="relative min-h-screen w-full bg-[#020202] flex items-center justify-center p-4">
-  <Card.Root class="w-full max-w-md bg-background/90">
+<div class="relative min-h-screen w-full bg-background flex items-center justify-center p-4">
+  <Card.Root class="w-full max-w-md bg-card/95 backdrop-blur-lg border border-border">
     <Card.Header>
       <Card.Title class="text-2xl font-bold text-center text-foreground/90">
         Create Room
@@ -198,33 +198,42 @@
     margin: 0;
     padding: 0;
     overflow-x: hidden;
-    background-color: #020202;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
   }
 
-  /* Add animation for the card */
   :global(.card) {
+    background-color: hsl(var(--card));
+    color: hsl(var(--card-foreground));
+    border: 1px solid hsl(var(--border));
     animation: fadeIn 0.5s ease-out;
   }
 
-  /* Override default input styles */
-  :global(input::placeholder) {
-    opacity: 0.5;
+  :global(.input) {
+    background-color: hsl(var(--background));
+    border-color: hsl(var(--input));
+    color: hsl(var(--foreground));
   }
 
   :global(.input:focus) {
-    box-shadow: none;
-    border-color: rgba(255, 255, 255, 0.2);
+    outline: none;
+    ring-color: hsl(var(--ring));
+    border-color: hsl(var(--ring));
+  }
+
+  :global(.input::placeholder) {
+    color: hsl(var(--muted-foreground));
   }
 
   /* Style select component */
   :global(.select-trigger) {
-    background-color: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.2);
+    background-color: hsl(var(--background));
+    border-color: hsl(var(--input));
   }
 
   :global(.select-content) {
-    background-color: rgba(23, 23, 23, 0.95);
-    border-color: rgba(255, 255, 255, 0.1);
+    background-color: hsl(var(--background));
+    border-color: hsl(var(--border));
   }
 
   @keyframes fadeIn {
