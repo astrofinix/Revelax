@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
   import { goto } from '$app/navigation';
   import { supabase } from '$lib/supabaseClient';
   import { onMount } from 'svelte';
@@ -7,17 +7,20 @@
   import { Input } from '$lib/components/ui/input';
   import { Label } from '$lib/components/ui/label';
   import * as Select from '$lib/components/ui/select';
+  import { gameModes } from '$lib/config/gameModes';
+  import { slide } from 'svelte/transition';
 
   let roomName = '';
-  let selectedMode = 'yap_sesh'; // default mode
+  let selectedMode = '';
   let error = '';
   let isLoading = false;
 
-  const gameModes = [
-    { id: 'fil_chill', name: 'The Filipino Chillnuman' },
-    { id: 'yap_sesh', name: 'Yap Session' },
-    { id: 'night_talk', name: 'Deep Night Talks' }
-  ];
+  $: console.log('Mode changed:', selectedMode);
+
+  function handleModeChange(value: string) {
+    console.log('Select value changed:', value);
+    selectedMode = value;
+  }
 
   function log(message, type = 'info') {
     const styles = {
@@ -48,14 +51,28 @@
 
   async function handleSubmit() {
     try {
+      log(`Attempting to create room with name: ${roomName} and mode: ${selectedMode}`, 'info');
+
       if (!validateRoomName(roomName)) {
         error = 'Room name must be 3-20 alphanumeric characters';
         log(`Invalid room name: ${roomName}`, 'error');
         return;
       }
 
+      if (!selectedMode) {
+        error = 'Please select a game mode';
+        log('No game mode selected', 'error');
+        return;
+      }
+
       isLoading = true;
       const username = localStorage.getItem('username');
+      if (!username) {
+        error = 'No username found';
+        log('No username found', 'error');
+        return;
+      }
+
       const roomCode = generateRoomCode();
       const userId = crypto.randomUUID();
 
@@ -142,24 +159,36 @@
         </p>
       </div>
 
-      <!-- Game mode select -->
+      <!-- Game mode selection with conditional description -->
       <div class="space-y-2">
-        <Label for="gameMode" class="text-foreground/80">
+        <Label class="text-foreground/80">
           Game Mode
         </Label>
-        <Select.Root bind:value={selectedMode}>
-          <Select.Trigger 
-            id="gameMode" 
-            class="w-full"
-          >
-            <Select.Value placeholder="Select game mode" />
-          </Select.Trigger>
-          <Select.Content>
-            {#each gameModes as mode}
-              <Select.Item value={mode.id}>{mode.name}</Select.Item>
-            {/each}
-          </Select.Content>
-        </Select.Root>
+        <div class="grid grid-cols-1 gap-4">
+          {#each Object.entries(gameModes) as [id, mode]}
+            <div class="space-y-2">
+              <button
+                type="button"
+                class="w-full relative flex items-center p-4 cursor-pointer rounded-lg border border-input bg-background hover:bg-accent/5 transition-colors
+                  {selectedMode === id ? 'border-primary ring-2 ring-ring' : ''}"
+                on:click={() => selectedMode = id}
+              >
+                <div class="font-medium flex items-center gap-2">
+                  {mode.name}
+                </div>
+              </button>
+              
+              {#if selectedMode === id}
+                <div 
+                  class="text-sm text-muted-foreground px-4 py-2 bg-muted/30 rounded-md"
+                  transition:slide={{ duration: 200 }}
+                >
+                  {mode.description}
+                </div>
+              {/if}
+            </div>
+          {/each}
+        </div>
       </div>
 
       {#if error}
@@ -172,13 +201,17 @@
     <Card.Footer class="flex flex-col gap-2">
       <Button
         type="submit"
-        disabled={!roomName.trim() || isLoading}
+        disabled={!roomName.trim() || !selectedMode || isLoading}
         class="w-full"
         variant="default"
         size="lg"
         on:click={handleSubmit}
       >
-        {isLoading ? 'Creating Room...' : 'Create Room'}
+        {#if isLoading}
+          Creating Room...
+        {:else}
+          Create Room 
+        {/if}
       </Button>
 
       <Button
@@ -225,21 +258,33 @@
     color: hsl(var(--muted-foreground));
   }
 
-  /* Style select component */
-  :global(.select-trigger) {
-    background-color: hsl(var(--background));
-    border-color: hsl(var(--input));
+  :global(.select-content) {
+    position: relative;
+    z-index: 50;
+    min-width: 8rem;
+    max-height: var(--radix-select-content-available-height);
   }
 
-  :global(.select-content) {
-    background-color: hsl(var(--background));
-    border-color: hsl(var(--border));
+  :global(.select-item[data-highlighted]) {
+    background-color: hsl(var(--accent));
+    color: hsl(var(--accent-foreground));
   }
 
   @keyframes fadeIn {
     from {
       opacity: 0;
       transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes contentFadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
     }
     to {
       opacity: 1;

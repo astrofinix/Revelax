@@ -10,6 +10,7 @@
   import * as Dialog from "$lib/components/ui/dialog";
   import { Badge } from "$lib/components/ui/badge";
   import { Users, Crown } from 'lucide-svelte';
+  import { gameModes } from '$lib/config/gameModes.ts';
 
   let players = [];
   let roomData = null;
@@ -107,6 +108,9 @@
     }
 
     roomData = data;
+    console.log('Loaded room data:', roomData);
+    console.log('Game mode:', roomData?.game_mode);
+    console.log('Available modes:', Object.keys(gameModes));
   }
 
   async function loadPlayers() {
@@ -167,14 +171,7 @@
   }
 
   function generateCardSequence(gameMode) {
-    // Get the number of cards based on game mode
-    const cardCounts = {
-      'fil_chill': 20,
-      'yap_sesh': 25,
-      'night_talk': 30
-    };
-    
-    const count = cardCounts[gameMode] || 20;
+    const count = gameModes[gameMode]?.cardCount || 20;
     const sequence = Array.from({length: count}, (_, i) => i + 1);
     
     // Fisher-Yates shuffle
@@ -324,20 +321,28 @@
     </Card.Header>
 
     <Card.Content class="space-y-6">
-      <!-- Enhanced Game Mode Badge -->
-      <div class="text-center space-y-2">
-        <Badge 
-          variant="secondary" 
-          class="text-base px-4 py-1.5"
-        >
-          {#if roomData?.game_mode === 'fil_chill'}
-            🍻 The Filipino Chillnuman
-          {:else if roomData?.game_mode === 'yap_sesh'}
-            💭 Yap Session
-          {:else if roomData?.game_mode === 'night_talk'}
-            🌙 Deep Night Talks
-          {/if}
-        </Badge>
+      <!-- Enhanced Game Mode Badge and Description -->
+      <div class="text-center space-y-3">
+        {#if roomData?.game_mode && gameModes[roomData.game_mode]}
+          <Badge 
+            variant="secondary" 
+            class="text-base px-4 py-1.5"
+          >
+            {gameModes[roomData.game_mode].name}
+          </Badge>
+          
+          <!-- Game Mode Description -->
+          <p class="text-sm text-muted-foreground">
+            {gameModes[roomData.game_mode].description}
+          </p>
+          <p class="text-xs text-muted-foreground">
+            {gameModes[roomData.game_mode].cardCount} cards in deck
+          </p>
+        {:else}
+          <Badge variant="secondary" class="text-base px-4 py-1.5">
+            Loading game mode...
+          </Badge>
+        {/if}
       </div>
 
       <Separator />
