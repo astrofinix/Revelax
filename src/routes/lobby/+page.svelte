@@ -55,6 +55,9 @@
       goto('/');
       return;
     }
+    
+    window.addEventListener('beforeunload', handlePlayerLeave);
+    
     await Promise.all([
       loadRoom(),
       loadPlayers()
@@ -191,7 +194,7 @@
       // Generate card sequence
       const sequence = generateCardSequence(roomData.game_mode);
       
-      // Create game session with initial state
+      // Create game session with initial state (removed timestamp fields)
       const { data: gameSession, error: sessionError } = await supabase
         .from('game_sessions')
         .insert({
@@ -199,14 +202,15 @@
           card_sequence: sequence,
           current_player_index: 0,
           current_card_index: 0,
-          is_active: true
+          is_active: true,
+          last_update: new Date().toISOString()
         })
         .select()
         .single();
 
       if (sessionError) throw sessionError;
 
-      // Update room status to trigger all players to redirect
+      // Update room status
       const { error: roomError } = await supabase
         .from('rooms')
         .update({ 
@@ -217,11 +221,8 @@
 
       if (roomError) throw roomError;
 
-      // Store game session ID for the game room
+      // Store game session ID
       localStorage.setItem('gameSessionId', gameSession.id);
-      
-      // Update the redirect here too
-      goto('/game-room');
 
     } catch (err) {
       console.error('Error starting game:', err);
@@ -235,16 +236,75 @@
     // Your existing presence code
   }
 
+  async function handlePlayerLeave() {
+    try {
+      // If admin is leaving, transfer admin rights
+      if (userId === roomData?.admin_id && players.length > 1) {
+        const nextAdmin = players.find(p => p.user_id !== userId);
+        if (nextAdmin) {
+          const { error: adminError } = await supabase
+            .from('rooms')
+            .update({ admin_id: nextAdmin.user_id })
+            .eq('id', roomId);
+          
+          if (adminError) throw adminError;
+        }
+      }
+
+      // Remove player from room
+      const { error: leaveError } = await supabase
+        .from('players')
+        .delete()
+        .eq('user_id', userId)
+        .eq('room_id', roomId);
+
+      if (leaveError) throw leaveError;
+
+      // Check remaining players
+      const { data: remainingPlayers, error: countError } = await supabase
+        .from('players')
+        .select('user_id')
+        .eq('room_id', roomId);
+
+      if (countError) throw countError;
+
+      // If no players left, delete the room
+      if (!remainingPlayers || remainingPlayers.length === 0) {
+        const { error: deleteError } = await supabase
+          .from('rooms')
+          .delete()
+          .eq('id', roomId);
+
+        if (deleteError) throw deleteError;
+        console.log('Room deleted - no players remaining');
+      }
+
+      // Clear local storage
+      localStorage.removeItem('roomId');
+      localStorage.removeItem('currentRoomCode');
+      localStorage.removeItem('gameSessionId');
+
+    } catch (err) {
+      console.error('Error handling player leave:', err);
+    }
+  }
+
   onDestroy(() => {
-    playersSubscription.unsubscribe();
-    if (updateInterval) clearInterval(updateInterval);
+    handlePlayerLeave();
+    window.removeEventListener('beforeunload', handlePlayerLeave);
+    if (playersSubscription) {
+      playersSubscription.unsubscribe();
+    }
+    if (updateInterval) {
+      clearInterval(updateInterval);
+    }
   });
 
   async function copyRoomCode() {
     try {
       await navigator.clipboard.writeText(roomCode);
       const originalError = error;
-      error = 'Room code copied! ✨';
+      error = '✨ Room code copied to clipboard!';
       setTimeout(() => {
         error = originalError;
       }, 2000);
@@ -383,7 +443,10 @@
 
       <!-- Error Display -->
       {#if error}
-        <div class="p-3 text-sm text-destructive bg-destructive/10 rounded-md animate-in fade-in-50">
+        <div class="p-3 text-sm rounded-md animate-in fade-in-50 {error.includes('copied') 
+          ? 'text-primary bg-primary/10' 
+          : 'text-destructive bg-destructive/10'
+        }">
           {error}
         </div>
       {/if}

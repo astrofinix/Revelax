@@ -24,7 +24,8 @@ CREATE TABLE public.game_sessions (
     current_card INTEGER,
     is_active BOOLEAN DEFAULT true,
     started_at TIMESTAMPTZ DEFAULT NOW(),
-    created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now())
+    created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()),
+    last_update TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
 -- Add foreign key reference back to game_sessions

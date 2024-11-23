@@ -86,12 +86,22 @@
           room_name: roomName.trim(),
           admin_id: userId,
           game_mode: selectedMode,
-          is_active: true
+          is_active: true,
+          status: 'waiting'
         })
         .select()
         .single();
 
-      if (roomError) throw roomError;
+      if (roomError) {
+        log(`Room creation error: ${roomError.message}`, 'error');
+        throw new Error(roomError.message);
+      }
+      
+      if (!room) {
+        log('No room data returned', 'error');
+        throw new Error('Failed to create room');
+      }
+      
       log('Room created successfully', 'success');
 
       // Create admin player
@@ -102,12 +112,15 @@
           user_id: userId,
           username: username,
           is_admin: true,
-          is_connected: true
+          is_connected: true,
+          is_ready: false
         });
 
       if (playerError) {
+        log(`Player creation error: ${playerError.message}`, 'error');
+        // Clean up the room if player creation fails
         await supabase.from('rooms').delete().eq('id', room.id);
-        throw playerError;
+        throw new Error(playerError.message);
       }
       log('Admin player created successfully', 'success');
 
@@ -121,7 +134,7 @@
 
     } catch (err) {
       log(`Error: ${err.message}`, 'error');
-      error = 'Failed to create room. Please try again.';
+      error = err.message || 'Failed to create room. Please try again.';
     } finally {
       isLoading = false;
     }
@@ -210,7 +223,7 @@
         {#if isLoading}
           Creating Room...
         {:else}
-          Create Room 
+          Create Room
         {/if}
       </Button>
 

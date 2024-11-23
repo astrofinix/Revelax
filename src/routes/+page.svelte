@@ -3,7 +3,13 @@
   import * as Card from '$lib/components/ui/card';
   import { Button } from '$lib/components/ui/button';
   import { Separator } from '$lib/components/ui/separator';
+  import * as Dialog from '$lib/components/ui/dialog';
+  import { Checkbox } from '$lib/components/ui/checkbox';
+  import { Label } from '$lib/components/ui/label';
   import { onMount } from 'svelte';
+
+  let termsAccepted = false;
+  let showTerms = false;
 
   onMount(() => {
     // Always use dark mode
@@ -11,6 +17,9 @@
   });
 
   function handleRoomAction(action) {
+    if (!termsAccepted) {
+      return;
+    }
     localStorage.setItem('roomAction', action);
     goto('/username');
   }
@@ -57,10 +66,10 @@
   </div>
 
   <!-- Content -->
-  <div class="relative z-10 min-h-screen flex items-center justify-center p-4">
+  <div class="relative z-10 min-h-screen flex items-center justify-center p-1">
     <Card.Root class="w-full max-w-md bg-card/95 backdrop-blur-lg border border-border">
-      <Card.Header class="space-y-2">
-        <Card.Title class="text-4xl font-bold tracking-tight text-card-foreground text-center">
+      <Card.Header class="space-y-1 pb-24">
+        <Card.Title class="text-4xl font-bold tracking-tight text-card-foreground text-center revelax-title">
           Revelax
         </Card.Title>
         <Card.Description class="text-center text-muted-foreground">
@@ -68,12 +77,35 @@
         </Card.Description>
       </Card.Header>
 
-      <Card.Footer class="flex flex-col gap-4 p-6">
+      <Card.Content class="px-6 pb-1">
+        <div class="flex items-center space-x-2">
+          <Checkbox 
+            id="terms" 
+            bind:checked={termsAccepted}
+          />
+          <Label
+            for="terms"
+            class="text-sm text-muted-foreground leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+          >
+            I agree to follow the
+            <button 
+              class="text-primary hover:underline focus:outline-none"
+              on:click={() => showTerms = true}
+              type="button"
+            >
+              community guidelines
+            </button>
+          </Label>
+        </div>
+      </Card.Content>
+
+      <Card.Footer class="flex flex-col gap-3 p-6">
         <Button 
           variant="default"
           size="lg"
-          class="w-full text-lg py-6 bg-primary text-primary-foreground hover:bg-primary/90"
+          class="w-full text-lg py-6 bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           on:click={() => handleRoomAction('create')}
+          disabled={!termsAccepted}
         >
           Create Room
         </Button>
@@ -83,13 +115,74 @@
         <Button 
           variant="secondary"
           size="lg"
-          class="w-full text-lg py-6 bg-secondary text-secondary-foreground hover:bg-secondary/80"
+          class="w-full text-lg py-6 bg-secondary text-secondary-foreground hover:bg-secondary/80 disabled:opacity-50"
           on:click={() => handleRoomAction('join')}
+          disabled={!termsAccepted}
         >
           Join Room
         </Button>
       </Card.Footer>
     </Card.Root>
+
+    <!-- Terms Modal -->
+    <Dialog.Root bind:open={showTerms}>
+      <Dialog.Content class="max-w-md max-h-[80vh] overflow-y-auto">
+        <Dialog.Header class="space-y-3 pb-2">
+          <Dialog.Title class="text-2xl font-semibold">Welcome to Revelax! 👋</Dialog.Title>
+          <Dialog.Description class="text-muted-foreground">
+            Before we start having fun, here's a quick overview of how we can make this a great experience for everyone.
+          </Dialog.Description>
+        </Dialog.Header>
+
+        <div class="space-y-6 py-6">
+          <p class="text-muted-foreground">Updated: {new Date().toLocaleDateString()}</p>
+          
+          <div class="space-y-2">
+            <h3 class="text-base font-medium text-foreground">🤝 Playing Together</h3>
+            <p class="text-muted-foreground">
+              By joining Revelax, you're becoming part of our community of people who love meaningful conversations and fun interactions!
+            </p>
+          </div>
+
+          <div class="space-y-2">
+            <h3 class="text-base font-medium text-foreground">💭 Community Guidelines</h3>
+            <p class="text-muted-foreground">Here's how we can make this fun for everyone:</p>
+            <ul class="list-disc pl-4 space-y-2 mt-2 text-muted-foreground">
+              <li>Be kind and respectful to other players</li>
+              <li>Keep conversations friendly and appropriate</li>
+              <li>Let's create a safe space for everyone</li>
+              <li>What happens in Revelax, stays in Revelax</li>
+            </ul>
+          </div>
+
+          <div class="space-y-2">
+            <h3 class="text-base font-medium text-foreground">🔒 Your Privacy Matters</h3>
+            <p class="text-muted-foreground">
+              We care about your privacy and keep your information safe. We only collect what's needed to make your experience awesome!
+            </p>
+          </div>
+        </div>
+
+        <Dialog.Footer class="gap-2">
+          <Button 
+            variant="default"
+            class="bg-primary hover:bg-primary/90"
+            on:click={() => {
+              showTerms = false;
+              termsAccepted = true;
+            }}
+          >
+            Let's Play! ✨
+          </Button>
+          <Button 
+            variant="outline"
+            on:click={() => showTerms = false}
+          >
+            Maybe Later
+          </Button>
+        </Dialog.Footer>
+      </Dialog.Content>
+    </Dialog.Root>
   </div>
 </div>
 
@@ -125,6 +218,9 @@
       opacity: 1;
       transform: translateY(0);
     }
+  }
+  :global(.checkbox) {
+    @apply border-2 border-muted-foreground/50;
   }
 </style>
   
