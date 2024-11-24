@@ -16,6 +16,7 @@
     document.documentElement.classList.add('dark');
   });
 
+  // @ts-ignore
   function handleRoomAction(action) {
     if (!termsAccepted) {
       return;
@@ -69,10 +70,10 @@
   <div class="relative z-10 min-h-screen flex items-center justify-center p-1">
     <Card.Root class="w-full max-w-md bg-card/95 backdrop-blur-lg border border-border">
       <Card.Header class="space-y-1 pb-24">
-        <Card.Title class="text-4xl font-bold tracking-tight text-card-foreground text-center revelax-title">
+        <Card.Title class="signature-font text-6xl font-bold tracking-tight text-card-foreground text-center revelax-title mt-[0.5em]">
           Revelax
         </Card.Title>
-        <Card.Description class="text-center text-muted-foreground">
+        <Card.Description class="sans-font font-[600] text-center text-muted-foreground ">
           Where conversations begin.
         </Card.Description>
       </Card.Header>
@@ -103,7 +104,7 @@
         <Button 
           variant="default"
           size="lg"
-          class="w-full text-lg py-6 bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          class="sans-font font-[600] w-full text-lg py-6 bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           on:click={() => handleRoomAction('create')}
           disabled={!termsAccepted}
         >

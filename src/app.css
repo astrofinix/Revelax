@@ -2,6 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: 'Larken';
+  src: url('/fonts/Larken.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Montserrat';
+  src: url('/fonts/Montserrat-VariableFont_wght.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;
@@ -58,6 +74,10 @@
   color: hsl(var(--foreground));
 }
 
+html, body {
+  font-family: 'Montserrat', sans-serif;
+}
+
 :global(.card) {
   background-color: hsl(var(--card));
   color: hsl(var(--card-foreground));
@@ -74,4 +94,14 @@
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+.signature-font {
+  font-family: 'Larken', sans-serif;
+  /* letter-spacing: 0.01em; */
+}
+
+.sans-font {
+  font-family: 'Montserrat', sans-serif;
+  /* font-weight: 500; */
 }
