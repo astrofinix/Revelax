@@ -66,6 +66,8 @@
     </svg>
   </div>
 
+  <div class="noise"></div>
+
   <!-- Content -->
   <div class="relative z-10 min-h-screen flex items-center justify-center p-1">
     <Card.Root class="w-full max-w-md bg-card/95 backdrop-blur-lg border border-border">
@@ -186,6 +188,8 @@
     </Dialog.Root>
   </div>
 </div>
+
+<canvas id="noise" class="noise" style="z-index: 2;"></canvas>
 
 <style>
   :global(body) {
