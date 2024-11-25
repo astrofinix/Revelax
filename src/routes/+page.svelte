@@ -71,7 +71,7 @@
   <!-- Content -->
   <div class="relative z-10 min-h-screen flex items-center justify-center p-1">
     <Card.Root class="w-full max-w-md bg-card/95 backdrop-blur-lg border border-border">
-      <Card.Header class="space-y-1 pb-24">
+      <Card.Header class="space-y-1">
         <Card.Title class="signature-font text-6xl font-bold tracking-tight text-card-foreground text-center revelax-title mt-[0.5em]">
           Revelax
         </Card.Title>
@@ -81,7 +81,10 @@
       </Card.Header>
 
       <Card.Content class="px-6 pb-1">
-        <div class="flex items-center space-x-2">
+        <div class="flex justify-center">
+          <img class="pb-10" src="./revelax.gif" alt="A fun GIF" width="160">
+        </div>
+        <div class="flex justify-center space-x-2">
           <Checkbox 
             id="terms" 
             bind:checked={termsAccepted}
