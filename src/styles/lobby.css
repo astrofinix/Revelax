@@ -1,0 +1,175 @@
+:global(body) {
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+  }
+
+  :global(.card) {
+    background-color: hsl(var(--card));
+    color: hsl(var(--card-foreground));
+    border: 1px solid hsl(var(--border));
+    animation: fadeIn 0.5s ease-out;
+  }
+
+  /* Scrollbar styles */
+  div::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  div::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  div::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--primary) / 0.2);
+    border-radius: 20px;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  svg {
+    height: 100%;
+    width: 100%;
+    mix-blend-mode: screen;
+    opacity: 0.7;
+  }
+
+  .card-container {
+    width: 100%;
+    padding: 1rem;
+  }
+
+  .game-card {
+    @apply bg-card rounded-xl transition-all duration-300 ease-out;
+    border: 1px solid hsl(var(--border));
+    min-height: 400px;
+    perspective: 1000px;
+  }
+
+  .game-card:not(:disabled).active {
+    @apply cursor-pointer hover:border-primary/50;
+  }
+
+  .game-card:not(:disabled).active:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1),
+                0 8px 10px -6px rgb(0 0 0 / 0.1);
+  }
+
+  .card-inner {
+    position: relative;
+    transform-style: preserve-3d;
+    transition: transform 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  .card-face {
+    backface-visibility: hidden;
+    @apply rounded-xl overflow-hidden;
+  }
+
+  .card-front {
+    background: linear-gradient(
+      135deg,
+      hsl(var(--card)),
+      hsl(var(--card) / 0.8)
+    );
+  }
+
+  .card-back {
+    background: linear-gradient(
+      135deg,
+      hsl(var(--background)),
+      hsl(var(--card))
+    );
+    transform: rotateY(180deg);
+  }
+
+  .card-inner.revealed {
+    transform: rotateY(180deg);
+  }
+
+  .card-content-wrapper {
+    @apply bg-card/50 backdrop-blur-sm rounded-lg p-6;
+    border: 1px solid hsl(var(--border));
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1),
+                0 2px 4px -2px rgb(0 0 0 / 0.1);
+  }
+
+  .loading-card-state {
+    @apply flex flex-col items-center justify-center;
+  }
+
+  .loading-animation {
+    @apply relative w-24 h-32 mb-4;
+  }
+
+  .card-stack {
+    @apply relative w-full h-full;
+    perspective: 1000px;
+  }
+
+  .stacked-card {
+    @apply absolute inset-0 rounded-xl border border-primary/20;
+    background: linear-gradient(
+      135deg,
+      hsl(var(--primary) / 0.1),
+      hsl(var(--primary) / 0.05)
+    );
+    animation: float 2s ease-in-out infinite;
+    animation-delay: var(--delay);
+    transform: translateY(var(--offset)) scale(0.95);
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1),
+                0 2px 4px -2px rgb(0 0 0 / 0.1);
+  }
+
+  @keyframes float {
+    0%, 100% {
+      transform: translateY(var(--offset)) scale(0.95);
+    }
+    50% {
+      transform: translateY(calc(var(--offset) - 8px)) scale(0.95);
+    }
+  }
+
+  .game-card {
+    @apply bg-card rounded-xl transition-all duration-300 ease-out;
+    border: 1px solid hsl(var(--border));
+    min-height: 400px;
+    perspective: 1000px;
+  }
+
+  .game-card:not(:disabled).active {
+    @apply cursor-pointer hover:border-primary/50;
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% {
+      box-shadow: 0 0 0 0 hsl(var(--primary) / 0.3);
+    }
+    50% {
+      box-shadow: 0 0 0 8px hsl(var(--primary) / 0);
+    }
+  }
+
+  .card-inner {
+    position: relative;
+    transform-style: preserve-3d;
+    transition: transform 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  .card-face {
+    backface-visibility: hidden;
+    @apply rounded-xl overflow-hidden;
+  }

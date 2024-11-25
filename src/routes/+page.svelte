@@ -10,14 +10,33 @@
 
   let termsAccepted = false;
   let showTerms = false;
+  let isFirstVisit = true;
 
   onMount(() => {
     // Always use dark mode
     document.documentElement.classList.add('dark');
+    
+    // Check if user has previously accepted terms
+    const hasAcceptedTerms = localStorage.getItem('termsAccepted');
+    if (hasAcceptedTerms === 'true') {
+      termsAccepted = true;
+      isFirstVisit = false;
+    } else {
+      // Show terms dialog automatically on first visit
+      showTerms = true;
+      isFirstVisit = true;
+    }
   });
+
+  function handleTermsAccept() {
+    termsAccepted = true;
+    showTerms = false;
+    localStorage.setItem('termsAccepted', 'true');
+  }
 
   function handleRoomAction(action) {
     if (!termsAccepted) {
+      showTerms = true;
       return;
     }
     localStorage.setItem('roomAction', action);
@@ -82,6 +101,11 @@
           <Checkbox 
             id="terms" 
             bind:checked={termsAccepted}
+            on:change={(e) => {
+              if (!e.target.checked) {
+                showTerms = true;
+              }
+            }}
           />
           <Label
             for="terms"
@@ -125,7 +149,15 @@
     </Card.Root>
 
     <!-- Terms Modal -->
-    <Dialog.Root bind:open={showTerms}>
+    <Dialog.Root 
+      bind:open={showTerms}
+      onOpenChange={(open) => {
+        // Prevent closing on first visit
+        if (isFirstVisit && !termsAccepted) {
+          showTerms = true;
+        }
+      }}
+    >
       <Dialog.Content class="max-w-md max-h-[80vh] overflow-y-auto">
         <Dialog.Header class="space-y-3 pb-2">
           <Dialog.Title class="text-2xl font-semibold">Welcome to Revelax! 👋</Dialog.Title>
@@ -148,6 +180,7 @@
             <h3 class="text-base font-medium text-foreground">💭 Community Guidelines</h3>
             <p class="text-muted-foreground">Here's how we can make this fun for everyone:</p>
             <ul class="list-disc pl-4 space-y-2 mt-2 text-muted-foreground">
+              <li>When in doubt about the card, use you best judgement, deer🦌.</li>
               <li>Be kind and respectful to other players</li>
               <li>Keep conversations friendly and appropriate</li>
               <li>Let's create a safe space for everyone</li>
@@ -167,19 +200,18 @@
           <Button 
             variant="default"
             class="bg-primary hover:bg-primary/90"
-            on:click={() => {
-              showTerms = false;
-              termsAccepted = true;
-            }}
+            on:click={handleTermsAccept}
           >
-            Let's Play! ✨
+            {isFirstVisit ? "I Agree! Let's Play! ✨" : "Let's Play! ✨"}
           </Button>
-          <Button 
-            variant="outline"
-            on:click={() => showTerms = false}
-          >
-            Maybe Later
-          </Button>
+          {#if !isFirstVisit}
+            <Button 
+              variant="outline"
+              on:click={() => showTerms = false}
+            >
+              Maybe Later
+            </Button>
+          {/if}
         </Dialog.Footer>
       </Dialog.Content>
     </Dialog.Root>

@@ -205,7 +205,7 @@
       </div>
 
       {#if error}
-        <div class="p-3 text-sm text-destructive/90 bg-destructive/5 rounded-md border border-destructive/20">
+        <div class="p-3 text-sm rounded-md animate-in fade-in-50 bg-red-500/20 text-red-300 border border-red-500/30">
           {error}
         </div>
       {/if}
@@ -238,70 +238,3 @@
     </Card.Footer>
   </Card.Root>
 </div>
-
-<style>
-  :global(body) {
-    margin: 0;
-    padding: 0;
-    overflow-x: hidden;
-    background-color: hsl(var(--background));
-    color: hsl(var(--foreground));
-  }
-
-  :global(.card) {
-    background-color: hsl(var(--card));
-    color: hsl(var(--card-foreground));
-    border: 1px solid hsl(var(--border));
-    animation: fadeIn 0.5s ease-out;
-  }
-
-  :global(.input) {
-    background-color: hsl(var(--background));
-    border-color: hsl(var(--input));
-    color: hsl(var(--foreground));
-  }
-
-  :global(.input:focus) {
-    outline: none;
-    ring-color: hsl(var(--ring));
-    border-color: hsl(var(--ring));
-  }
-
-  :global(.input::placeholder) {
-    color: hsl(var(--muted-foreground));
-  }
-
-  :global(.select-content) {
-    position: relative;
-    z-index: 50;
-    min-width: 8rem;
-    max-height: var(--radix-select-content-available-height);
-  }
-
-  :global(.select-item[data-highlighted]) {
-    background-color: hsl(var(--accent));
-    color: hsl(var(--accent-foreground));
-  }
-
-  @keyframes fadeIn {
-    from {
-      opacity: 0;
-      transform: translateY(20px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  @keyframes contentFadeIn {
-    from {
-      opacity: 0;
-      transform: translateY(-4px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-</style>

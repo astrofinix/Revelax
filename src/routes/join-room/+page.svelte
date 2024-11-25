@@ -155,7 +155,7 @@
       </div>
 
       {#if error}
-        <div class="p-3 text-sm text-destructive/90 bg-destructive/5 rounded-md border border-destructive/20 animate-in fade-in-50">
+        <div class="p-3 text-sm rounded-md animate-in fade-in-50 bg-red-500/20 text-red-300 border border-red-500/30">
           {error}
         </div>
       {/if}
