@@ -2,6 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: 'Larken';
+  src: url('/fonts/Larken.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Montserrat';
+  src: url('/fonts/Montserrat-VariableFont_wght.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;
@@ -53,9 +69,13 @@
 :global(body) {
   margin: 0;
   padding: 0;
-  overflow-x: hidden;
+  overflow: hidden;
   background-color: hsl(var(--background));
   color: hsl(var(--foreground));
+}
+
+html, body {
+  font-family: 'Montserrat', sans-serif;
 }
 
 :global(.card) {
@@ -74,4 +94,44 @@
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+.signature-font {
+  font-family: 'Larken', sans-serif;
+  /* letter-spacing: 0.01em; */
+}
+
+.sans-font {
+  font-family: 'Montserrat', sans-serif;
+  /* font-weight: 500; */
+}
+
+.noise {
+  position: fixed;
+  top: -50%;
+  left: -50%;
+  right: -50%;
+  bottom: -50%;
+  width: 200%;
+  height: 200vh;
+  background: transparent url('http://assets.iceable.com/img/noise-transparent.png') repeat 0 0;
+  background-repeat: repeat;
+  animation: noise-animation .2s infinite;
+  opacity: .9;
+  visibility: visible;
+  z-index: 1;
+}
+
+@keyframes noise-animation {
+    0% { transform: translate(0,0) }
+    10% { transform: translate(-5%,-5%) }
+    20% { transform: translate(-10%,5%) }
+    30% { transform: translate(5%,-10%) }
+    40% { transform: translate(-5%,15%) }
+    50% { transform: translate(-10%,5%) }
+    60% { transform: translate(15%,0) }
+    70% { transform: translate(0,10%) }
+    80% { transform: translate(-15%,0) }
+    90% { transform: translate(10%,5%) }
+    100% { transform: translate(5%,0) }
 }
