@@ -15,7 +15,7 @@ CREATE TABLE public.rooms (
 );
 
 -- Game Sessions table
-CREATE TABLE public.game_sessions (
+CREATE TABLE IF NOT EXISTS game_sessions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     room_id UUID REFERENCES public.rooms(id) ON DELETE CASCADE,
     card_sequence INTEGER[] NOT NULL,
@@ -24,6 +24,7 @@ CREATE TABLE public.game_sessions (
     current_card_index INTEGER DEFAULT 0,
     current_player_index INTEGER DEFAULT 0,
     current_card_revealed BOOLEAN DEFAULT false,
+    game_started BOOLEAN DEFAULT false,
     is_active BOOLEAN DEFAULT true,
     started_at TIMESTAMPTZ DEFAULT NOW(),
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -51,7 +52,7 @@ CREATE TABLE public.game_cards (
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now())
 );
 
--- Players table
+-- Players table (updated with last_updated column)
 CREATE TABLE public.players (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     room_id UUID REFERENCES public.rooms(id) ON DELETE CASCADE,
@@ -60,8 +61,24 @@ CREATE TABLE public.players (
     is_admin BOOLEAN DEFAULT false,
     is_connected BOOLEAN DEFAULT true,
     is_ready BOOLEAN DEFAULT false,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    last_updated TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Add trigger function for last_updated
+CREATE OR REPLACE FUNCTION update_last_updated_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.last_updated = NOW();
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+-- Create trigger for players table
+CREATE TRIGGER update_players_last_updated
+    BEFORE UPDATE ON players
+    FOR EACH ROW
+    EXECUTE FUNCTION update_last_updated_column();
 
 -- Indexes for better query performance
 CREATE INDEX idx_rooms_game_session ON public.rooms(game_session_id);
@@ -126,6 +143,7 @@ BEGIN
     player_sequence,
     current_player_index,
     is_active,
+    game_started,
     started_at,
     last_update,
     current_card_revealed
@@ -137,6 +155,7 @@ BEGIN
     0,
     p_player_sequence,
     0,
+    true,
     true,
     p_started_at,
     p_started_at,

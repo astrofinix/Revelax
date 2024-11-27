@@ -36,13 +36,18 @@
   let gameSession = null;
   let gameSubscription;
   let isCardRevealed = false;
-  let successMessage = '';
   let selectedGameMode = '';
   let currentCardCount = 0;
   let playersSubscription;
   let roomSubscription;
   let currentGameMode = writable(null);
   let currentGameModeData = derived(currentGameMode, $mode => gameModes[$mode] || null);
+  let currentGameState = writable({
+    deckName: '',
+    currentCardIndex: 0,
+    totalCards: 0,
+    isDrawPhase: false
+  });
 
   onMount(async () => {
     console.log('Component mounted');
@@ -178,44 +183,45 @@
   }
 
   async function checkAllPlayersReady() {
+    console.log('🔍 Checking all players ready status...');
     try {
-      if (!players.length || players.length < 2) {
+      // Get fresh room data
+      const { data: currentRoom } = await supabase
+        .from('rooms')
+        .select('status, game_session_id')
+        .eq('id', roomId)
+        .single();
+
+      // Don't proceed if game is already in progress
+      if (currentRoom?.status === 'playing' || currentRoom?.game_session_id) {
+        console.log('⚠️ Game already in progress');
         return false;
       }
-      
-      const allReady = players.every(p => p.is_ready);
-      const readyCount = players.filter(p => p.is_ready).length;
-      
-      readyStatus = `${readyCount}/${players.length} players ready`;
-      
-      // Only admin can initiate game start when all players are ready
-      if (allReady && roomData?.admin_id === userId && roomData?.status === 'waiting') {
-        console.log('All players ready, admin initiating game start...');
-        
-        // Use a transaction to update room status
-        const { data: updatedRoom, error: updateError } = await supabase
-          .from('rooms')
-          .update({ status: 'starting' })
-          .eq('id', roomId)
-          .eq('status', 'waiting')
-          .select()
-          .single();
 
-        if (updateError || !updatedRoom) {
-          console.log('Room already starting or status changed');
-          return false;
-        }
+      // Get fresh player data
+      const { data: readyPlayers, error: playersError } = await supabase
+        .from('players')
+        .select('*')
+        .eq('room_id', roomId)
+        .eq('is_ready', true);
 
-        // Proceed with game start only if we successfully updated the room
-        if (updatedRoom.status === 'starting') {
-          await handleGameStart();
-        }
+      if (playersError) throw playersError;
+
+      // Ensure minimum player count
+      if (!readyPlayers?.length || readyPlayers.length < 2) {
+        console.log('❌ Not enough ready players:', readyPlayers?.length);
+        return false;
       }
-      
-      return allReady;
+
+      // Only admin can start the game when all conditions are met
+      if (roomData?.admin_id === userId && currentRoom?.status === 'waiting') {
+        console.log('✨ All conditions met for game start!');
+        return await handleGameStart();
+      }
+
+      return false;
     } catch (err) {
-      console.error('Error checking player ready status:', err);
-      error = 'Failed to check player status';
+      console.error('💥 Error in checkAllPlayersReady:', err);
       return false;
     }
   }
@@ -230,17 +236,24 @@
       isLoading = true;
       const newReadyState = !isReady;
       
+      // First update local state
+      isReady = newReadyState;
+      
+      // Then update database (removed last_updated field)
       const { error: updateError } = await supabase
         .from('players')
         .update({ is_ready: newReadyState })
         .eq('user_id', userId)
         .eq('room_id', roomId);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        // Revert local state if update fails
+        isReady = !newReadyState;
+        throw updateError;
+      }
       
-      isReady = newReadyState;
+      // Update status after successful toggle
       await updatePlayerStatus();
-      await checkAllPlayersReady();
 
     } catch (err) {
       console.error('Error toggling ready state:', err);
@@ -617,37 +630,42 @@
     try {
       const session = payload.new;
       
+      if (!session) return;
+
+      console.log('🎲 Game session changed:', session);
+      
       // Update game session state
       gameSession = session;
-      gameStarted = session.is_active;
+      gameStarted = session.game_started;
       currentPlayerIndex = session.current_player_index;
       isMyTurn = session.player_sequence[session.current_player_index] === userId;
       isCardRevealed = session.current_card_revealed;
 
-      // Load card data if needed
-      if (session.current_card_revealed || isMyTurn) {
-        const { data: cardData, error: cardError } = await supabase
-          .from('game_cards')
-          .select('*')
-          .eq('game_mode', roomData.game_mode)
-          .eq('card_index', session.current_card)
-          .single();
-
-        if (cardError) throw cardError;
-        currentCard = cardData;
-      } else {
-        currentCard = null;
+      // Force game started state if we have an active session
+      if (session.is_active && !gameStarted) {
+        console.log('🎯 Forcing game started state');
+        gameStarted = true;
       }
 
-      console.log('Game state synchronized:', {
-        gameStarted,
-        currentPlayerIndex,
-        isMyTurn,
-        isCardRevealed,
-        currentCard
-      });
+      // Update card state
+      if (session.current_card_revealed || isMyTurn) {
+        if (!currentCard || currentCard.card_index !== session.current_card) {
+          const cardData = await loadCardData(roomData.game_mode, session.current_card);
+          if (cardData) {
+            currentCard = cardData;
+            console.log('🃏 Card loaded:', cardData);
+          }
+        }
+      } else {
+        currentCard = {
+          index: session.current_card,
+          content: null, // Face down state
+          game_mode: roomData.game_mode
+        };
+      }
+
     } catch (err) {
-      console.error('Error handling game state change:', err);
+      console.error('💥 Error in handleGameStateChange:', err);
       error = 'Failed to sync game state';
     }
   }
@@ -662,31 +680,26 @@
       isLoading = true;
       error = null;
 
-      // Check if this is the last card
-      const isLastCard = gameSession.current_card_index === (gameSession.card_sequence.length - 1);
+      // Calculate next player index
+      const nextPlayerIndex = (gameSession.current_player_index + 1) % gameSession.player_sequence.length;
+      const nextCardIndex = gameSession.current_card_index + 1;
 
-      if (isLastCard) {
-        // Handle game end for all players
-        await handleGameEnd();
-      } else {
-        // Calculate next indices
-        const nextCardIndex = gameSession.current_card_index + 1;
-        const nextPlayerIndex = (gameSession.current_player_index + 1) % players.length;
+      // Update game session for next turn
+      const { error: updateError } = await supabase
+        .from('game_sessions')
+        .update({
+          current_player_index: nextPlayerIndex,
+          current_card_index: nextCardIndex,
+          current_card: gameSession.card_sequence[nextCardIndex],
+          current_card_revealed: false,  // Reset card to face down for next player
+          last_update: new Date().toISOString()
+        })
+        .eq('id', gameSession.id);
 
-        // Update game session - this triggers sync for all players
-        const { error: updateError } = await supabase
-          .from('game_sessions')
-          .update({
-            current_card_index: nextCardIndex,
-            current_player_index: nextPlayerIndex,
-            current_card_revealed: false,
-            current_card: gameSession.card_sequence[nextCardIndex],
-            last_update: new Date().toISOString()
-          })
-          .eq('id', gameSession.id);
+      if (updateError) throw updateError;
 
-        if (updateError) throw updateError;
-      }
+      // Local state will be updated by the subscription handler
+
     } catch (err) {
       console.error('Error ending turn:', err);
       error = 'Failed to end turn';
@@ -697,8 +710,9 @@
 
   // 4. Add game session loading
   async function loadGameSession() {
+    console.log('📥 Loading game session...');
     try {
-      const { data, error } = await supabase
+      const { data: session, error } = await supabase
         .from('game_sessions')
         .select('*')
         .eq('room_id', roomId)
@@ -706,56 +720,72 @@
         .maybeSingle();
 
       if (error && error.code !== 'PGRST116') {
-        console.error('Error loading game session:', error);
+        // Only throw if it's not a "no rows returned" error
         throw error;
       }
 
-      if (data) {
-        console.log('Loaded active game session:', data);
-        gameSession = data;
-        gameStarted = true;  // If we have an active session, game is started
-        currentPlayerIndex = data.current_player_index;
-        isMyTurn = data.player_sequence[data.current_player_index] === userId;
-        
-        // Load the current card
-        if (roomData?.game_mode) {
-          const { data: cardData, error: cardError } = await supabase
-            .from('game_cards')
-            .select('*')
-            .eq('game_mode', roomData.game_mode)
-            .eq('card_index', data.current_card)
-            .single();
+      if (session) {
+        console.log('✅ Active session found:', session);
+        gameSession = session;
+        gameStarted = true;
+        currentPlayerIndex = session.current_player_index;
+        isMyTurn = session.player_sequence[session.current_player_index] === userId;
+        isCardRevealed = session.current_card_revealed;
 
-          if (cardError) {
-            console.error('Error loading card data:', cardError);
-            throw cardError;
+        // Load initial card state
+        if (isMyTurn || session.current_card_revealed) {
+          const cardData = await loadCardData(roomData.game_mode, session.current_card);
+          if (cardData) {
+            currentCard = cardData;
           }
-
-          currentCard = cardData;
-          console.log('Initial card loaded:', currentCard);
         }
       } else {
-        console.log('No active game session found');
-        resetGameState();
+        // Check room status to determine if game should be started
+        const { data: room } = await supabase
+          .from('rooms')
+          .select('status')
+          .eq('id', roomId)
+          .single();
+
+        if (room?.status === 'playing') {
+          console.log('🎮 Room is in playing state but no active session found');
+          gameStarted = true;
+          // Attempt to recover game state
+          await syncGameState();
+        } else {
+          console.log('ℹ️ No active session found and room not in playing state');
+          resetGameState();
+        }
       }
     } catch (err) {
-      console.error('Error in loadGameSession:', err);
+      console.error('💥 Error loading game session:', err);
       error = 'Failed to load game session';
-      resetGameState();
+      // Don't reset game state here, let the room status handle that
     }
   }
 
   // 2. Add new function to update player status
   async function updatePlayerStatus() {
+    console.log('🔄 Updating player status...');
     try {
-      const { data: currentPlayers, error } = await supabase
+      // Get fresh player data
+      const { data: currentPlayers, error: fetchError } = await supabase
         .from('players')
         .select('*')
         .eq('room_id', roomId)
         .order('created_at');
 
-      if (error) throw error;
+      if (fetchError) {
+        console.error('Failed to fetch players:', fetchError);
+        throw fetchError;
+      }
 
+      if (!currentPlayers) {
+        console.log('No players found');
+        return;
+      }
+
+      console.log('👥 Current players:', currentPlayers);
       players = currentPlayers;
       
       // Update ready status for current user
@@ -767,9 +797,17 @@
       // Update ready count
       const readyCount = players.filter(p => p.is_ready).length;
       readyStatus = `${readyCount}/${players.length} players ready`;
+      console.log('📊 Ready status:', readyStatus);
+
+      // Only check all players ready if everyone is ready
+      if (readyCount === players.length && readyCount >= 2) {
+        console.log('✨ All players ready, checking conditions...');
+        await checkAllPlayersReady();
+      }
 
     } catch (err) {
-      console.error('Error updating player status:', err);
+      console.error('💥 Error updating player status:', err);
+      // Don't throw the error, just log it
     }
   }
 
@@ -778,36 +816,121 @@
     return gameSession.current_card_index >= gameSession.card_sequence.length - 1;
   }
 
-  // Update setupSubscriptions function to handle multiple channels properly
+  // Update setupSubscriptions function for better real-time updates
   function setupSubscriptions() {
     try {
-      const channel = supabase.channel(`room_${roomId}`);
-
-      // Room subscription (handle this first)
-      channel.on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'rooms',
-        filter: `id=eq.${roomId}`
-      }, async (payload) => {
-        console.log('Room change detected:', payload);
-        if (payload.new) {
-          roomData = payload.new;
-          
-          // Handle game state changes
-          if (payload.new.status === 'playing' && !gameStarted) {
-            gameStarted = true;
-            await loadGameSession();
-            await goto('/game');
+      console.log('🔌 Setting up subscriptions...');
+      
+      // Game session subscription with enhanced payload handling
+      const gameChannel = supabase.channel(`game_${roomId}`)
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'game_sessions',
+          filter: `room_id=eq.${roomId}`
+        }, async (payload) => {
+          console.log('📡 Game session update received:', payload);
+          if (payload.new) {
+            // Handle all game session changes
+            await handleGameStateChange(payload);
           }
-        }
-      })
-      .subscribe();
+        })
+        .subscribe();
 
-      return channel;
+      // Enhanced room status subscription
+      const roomChannel = supabase.channel(`room_${roomId}`)
+        .on('postgres_changes', {
+          event: '*',  // Listen to all events
+          schema: 'public',
+          table: 'rooms',
+          filter: `id=eq.${roomId}`
+        }, async (payload) => {
+          console.log('🏠 Room update received:', payload);
+          await handleRoomStateChange(payload);
+        })
+        .subscribe();
+
+      // Player status subscription
+      const playerChannel = supabase.channel(`players_${roomId}`)
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'players',
+          filter: `room_id=eq.${roomId}`
+        }, async (payload) => {
+          console.log('👥 Player update received:', payload);
+          await handlePlayerStateChange(payload);
+        })
+        .subscribe();
+
+      return () => {
+        gameChannel.unsubscribe();
+        roomChannel.unsubscribe();
+        playerChannel.unsubscribe();
+      };
     } catch (err) {
-      console.error('Error setting up subscriptions:', err);
+      console.error('💥 Error in setupSubscriptions:', err);
       throw err;
+    }
+  }
+
+  // Add new handler for room state changes
+  async function handleRoomStateChange(payload) {
+    try {
+      const newRoomData = payload.new;
+      if (!newRoomData) return;
+
+      console.log('🏠 Room state changed:', newRoomData);
+      roomData = newRoomData;
+
+      // Check for game session and status
+      if (newRoomData.status === 'playing' && newRoomData.game_session_id) {
+        console.log('🎮 Game is now in progress');
+        if (!gameStarted) {
+          gameStarted = true;
+          await loadGameSession();
+        }
+      } else if (newRoomData.status === 'waiting') {
+        console.log('⏸️ Game reset to waiting state');
+        resetGameState();
+      }
+
+      // Update game mode if changed
+      if (newRoomData.game_mode) {
+        currentGameMode.set(newRoomData.game_mode);
+      }
+
+    } catch (err) {
+      console.error('💥 Error in handleRoomStateChange:', err);
+    }
+  }
+
+  // Add new handler for player state changes
+  async function handlePlayerStateChange(payload) {
+    try {
+      // Refresh player list
+      const { data: updatedPlayers, error } = await supabase
+        .from('players')
+        .select('*')
+        .eq('room_id', roomId)
+        .order('created_at');
+
+      if (error) throw error;
+
+      players = updatedPlayers;
+
+      // Update ready status for current user
+      const currentPlayer = players.find(p => p.user_id === userId);
+      if (currentPlayer) {
+        isReady = currentPlayer.is_ready;
+      }
+
+      // Update ready count
+      const readyCount = players.filter(p => p.is_ready).length;
+      readyStatus = `${readyCount}/${players.length} players ready`;
+
+    } catch (err) {
+      console.error('💥 Error in handlePlayerStateChange:', err);
     }
   }
 
@@ -825,35 +948,35 @@
   // 1. Update handleCardReveal to use sequence indices
   async function handleCardReveal() {
     try {
-      if (!isMyTurn || isCardRevealed || !gameSession) {
-        console.log('Cannot reveal card:', { isMyTurn, isCardRevealed, hasSession: !!gameSession });
-        return;
-      }
+      if (!isMyTurn || isCardRevealed || !gameSession) return;
       
       isLoading = true;
       error = null;
 
-      // Get current card index from sequence
-      const currentCardIndex = gameSession.card_sequence[gameSession.current_card_index];
-      console.log('Revealing card:', currentCardIndex);
-      
-      // Load card data
-      const cardData = await loadCardData(roomData.game_mode, currentCardIndex);
-      if (!cardData) {
-        throw new Error('Failed to load card data');
-      }
+      // First load the card data
+      const { data: cardData, error: cardError } = await supabase
+        .from('game_cards')
+        .select('*')
+        .eq('game_mode', roomData.game_mode)
+        .eq('card_index', gameSession.current_card)
+        .single();
 
-      // Update game session to show card is revealed - this triggers sync for all players
+      if (cardError) throw cardError;
+
+      // Then update game session to show card is revealed
       const { error: updateError } = await supabase
         .from('game_sessions')
         .update({
           current_card_revealed: true,
-          current_card: currentCardIndex,
           last_update: new Date().toISOString()
         })
         .eq('id', gameSession.id);
 
       if (updateError) throw updateError;
+
+      // Update local state
+      isCardRevealed = true;
+      currentCard = cardData;
 
     } catch (err) {
       console.error('Error revealing card:', err);
@@ -866,35 +989,43 @@
   // 2. Update syncGameState for better card synchronization
   async function syncGameState() {
     try {
-      const { data: session, error } = await supabase
-        .from('game_sessions')
-        .select('*')
-        .eq('room_id', roomId)
-        .eq('is_active', true)
+      const { data: room } = await supabase
+        .from('rooms')
+        .select('status, game_mode')
+        .eq('id', roomId)
         .single();
 
-      if (error) throw error;
+      if (room?.status === 'playing') {
+        const { data: session } = await supabase
+          .from('game_sessions')
+          .select('*')
+          .eq('room_id', roomId)
+          .eq('is_active', true)
+          .maybeSingle();
 
-      if (session) {
-        gameSession = session;
-        currentPlayerIndex = session.current_player_index;
-        isMyTurn = session.player_sequence[session.current_player_index] === userId;
-        isCardRevealed = session.current_card_revealed;
+        if (session) {
+          gameSession = session;
+          gameStarted = true;
+          currentPlayerIndex = session.current_player_index;
+          isMyTurn = session.player_sequence[session.current_player_index] === userId;
+          isCardRevealed = session.current_card_revealed;
 
-        // Only load card data if the card is revealed
-        if (session.current_card_revealed) {
-          const cardId = session.card_sequence[session.current_card_index];
-          const cardData = await loadCardData(roomData.game_mode, cardId);
-          if (cardData) {
-            currentCard = cardData;
+          if (session.current_card_revealed) {
+            const cardData = await loadCardData(room.game_mode, session.current_card);
+            if (cardData) {
+              currentCard = cardData;
+            }
           }
         } else {
-          // Reset current card when not revealed
-          currentCard = null;
+          console.log('⚠️ No active session found for playing room');
+          await handleGameStateReset();
         }
+      } else {
+        console.log('🔄 Room not in playing state, resetting game state');
+        resetGameState();
       }
     } catch (err) {
-      console.error('Error syncing game state:', err);
+      console.error('💥 Error in syncGameState:', err);
       error = 'Failed to sync game state';
     }
   }
@@ -1223,74 +1354,126 @@
     }
   });
 
-  // Update handleGameStart function to be more strict about race conditions
+  // Update handleGameStart function
   async function handleGameStart() {
+    console.log('🎮 Starting game initialization...');
     try {
-      if (gameStarted) {
-        console.log('Game already started, ignoring start request');
-        return;
-      }
-
-      isLoading = true;
-      error = null;
-
-      // Double check room status before proceeding
-      const { data: currentRoom, error: roomError } = await supabase
+      // Set room to starting state first
+      const { error: startingError } = await supabase
         .from('rooms')
-        .select('status')
+        .update({ status: 'starting' })
         .eq('id', roomId)
-        .single();
+        .eq('status', 'waiting');
 
-      if (roomError || currentRoom?.status !== 'starting') {
-        console.log('Room not in correct state to start game');
-        return;
+      if (startingError) {
+        console.error('Failed to set starting state:', startingError);
+        return false;
       }
 
-      // Generate game data
+      // Generate card sequence
       const cardSequence = await generateCardSequence(roomData.game_mode);
-      const playerSequence = players.map(p => p.user_id);
+      if (!cardSequence?.length) {
+        throw new Error('Failed to generate card sequence');
+      }
 
-      // Create game session using RPC
+      // Create session parameters
+      const sessionParams = {
+        p_room_id: roomId,
+        p_card_sequence: cardSequence,
+        p_player_sequence: players.map(p => p.user_id),
+        p_started_at: new Date().toISOString()
+      };
+
+      // Create new session using RPC
       const { data: newSession, error: sessionError } = await supabase.rpc(
         'create_game_session_safe',
-        {
-          p_room_id: roomId,
-          p_card_sequence: cardSequence,
-          p_player_sequence: playerSequence,
-          p_started_at: new Date().toISOString()
-        }
+        sessionParams
       );
 
-      if (sessionError) {
-        throw sessionError;
+      if (sessionError || !newSession) {
+        throw new Error('Failed to create game session');
       }
 
-      // Update room status to playing
-      const { error: updateError } = await supabase
-        .from('rooms')
-        .update({ 
-          status: 'playing',
-          game_session_id: newSession.id 
-        })
-        .eq('id', roomId)
-        .eq('status', 'starting')
-        .single();
+      // Update local state
+      gameSession = newSession;
+      gameStarted = true;
+      currentPlayerIndex = 0;
+      isMyTurn = sessionParams.p_player_sequence[0] === userId;
+      isCardRevealed = false;
+      currentCard = null;
 
-      if (updateError) {
-        throw updateError;
-      }
-
+      return true;
     } catch (err) {
-      console.error('Error starting game:', err);
-      error = 'Failed to start game';
+      console.error('💥 Error in handleGameStart:', err);
       // Reset room status on error
       await supabase
         .from('rooms')
         .update({ status: 'waiting' })
-        .eq('id', roomId)
-        .eq('status', 'starting');
-    } finally {
-      isLoading = false;
+        .eq('id', roomId);
+      return false;
+    }
+  }
+
+  // Add this helper function if not already present
+  async function loadCurrentCard() {
+    console.log('📥 Loading current card...');
+    if (!gameSession?.card_sequence || !roomData?.game_mode) return null;
+
+    const currentCardIndex = gameSession.current_card_index;
+    const cardIndexInSequence = gameSession.card_sequence[currentCardIndex];
+
+    const { data, error } = await supabase
+      .from('game_cards')
+      .select('*')
+      .eq('game_mode', roomData.game_mode)
+      .eq('card_index', cardIndexInSequence)
+      .single();
+
+    if (error) {
+      console.error('❌ Failed to load card:', error);
+      return null;
+    }
+
+    console.log('✅ Card loaded:', data);
+    return data;
+  }
+
+  async function handleGameStateReset() {
+    console.log('🔄 Resetting game state...');
+    try {
+      // Reset local state
+      gameStarted = false;
+      isStartingGame = false;
+      currentCard = null;
+      isMyTurn = false;
+      currentPlayerIndex = 0;
+      isCardRevealed = false;
+      gameSession = null;
+
+      // Reset database state
+      const { error: roomError } = await supabase
+        .from('rooms')
+        .update({ 
+          status: 'waiting',
+          game_session_id: null 
+        })
+        .eq('id', roomId);
+
+      if (roomError) throw roomError;
+
+      // Reset player ready states
+      const { error: playerError } = await supabase
+        .from('players')
+        .update({ is_ready: false })
+        .eq('room_id', roomId);
+
+      if (playerError) throw playerError;
+
+      console.log('✅ Game state reset complete');
+
+    } catch (err) {
+      console.error('💥 Error resetting game state:', err);
+      error = 'Failed to reset game state';
     }
   }
 </script>
@@ -1369,23 +1552,20 @@
                   <div class="game-card-container w-full aspect-[3/4] relative">
                     <button
                       type="button"
-                      class="game-card w-full h-full {isMyTurn && !isCardRevealed ? 'active' : ''}"
-                      on:click={() => isMyTurn && !isCardRevealed && handleCardReveal()}
-                      disabled={!isMyTurn || isCardRevealed || isLoading}
+                      class="game-card w-full h-full {$currentGameState.isDrawPhase ? 'active pulse-animation' : ''}"
+                      on:click={() => $currentGameState.isDrawPhase && handleCardReveal()}
+                      disabled={!$currentGameState.isDrawPhase || isLoading}
                     >
                       <div class="card-inner {isCardRevealed ? 'revealed' : ''} w-full h-full">
                         <!-- Face-down state -->
                         <div class="card-face card-front absolute inset-0">
                           <div class="flex flex-col items-center justify-center h-full p-8 text-center">
-                            {#if !gameStarted}
-                              <p class="text-muted-foreground text-xl">Waiting for game to start...</p>
-                            {:else if isMyTurn && !isCardRevealed}
-                              <div class="space-y-4">
+                            {#if $currentGameState.isDrawPhase}
+                              <div class="space-y-4 animate-pulse">
                                 <p class="text-2xl font-semibold text-primary">Your Turn!</p>
                                 <p class="text-lg text-muted-foreground">Click to Draw Card</p>
                               </div>
-                            {:else}
-                              <!-- Loading state for waiting players -->
+                            {:else if !isMyTurn}
                               <div class="loading-card-state space-y-6">
                                 <div class="loading-animation">
                                   <div class="card-stack">
@@ -1409,12 +1589,6 @@
                         <div class="card-face card-back absolute inset-0">
                           {#if isCardRevealed && currentCard?.content}
                             <div class="flex flex-col items-center justify-center h-full p-8 text-center space-y-6">
-                              <div class="card-number text-sm font-medium text-primary/60">
-                                Card {gameSession?.current_card_index + 1} of {gameSession?.card_sequence?.length}
-                                {#if isLastCard()}
-                                  <span class="text-orange-500 ml-2">(Final Card!)</span>
-                                {/if}
-                              </div>
                               <div class="card-content-wrapper max-w-sm mx-auto p-8 rounded-xl bg-card/50 backdrop-blur-sm">
                                 <p class="text-2xl font-medium leading-relaxed text-primary">
                                   {currentCard.content}
@@ -1460,22 +1634,6 @@
                 {isMyTurn ? " (You)" : ""}
               </Badge>
             </div>
-            
-            {#if isMyTurn}
-              <Button 
-                variant="default" 
-                size="lg" 
-                class="w-full bg-primary animate-in fade-in-50 duration-300"
-                disabled={isLoading}
-                on:click={handleEndTurn}
-              >
-                {isLoading ? 'Processing...' : 'End Turn'}
-              </Button>
-            {:else}
-              <p class="text-muted-foreground animate-pulse">
-                Waiting for {players[currentPlayerIndex]?.username} to finish their turn...
-              </p>
-            {/if}
           </div>
         </Card.Header>
 
@@ -1790,3 +1948,24 @@
     </Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>
+<style>
+.pulse-animation {
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(var(--primary) / 0.7);
+  }
+  
+  70% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 10px rgba(var(--primary) / 0);
+  }
+  
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(var(--primary) / 0);
+  }
+}
+</style>
