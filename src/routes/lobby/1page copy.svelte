@@ -1,7 +1,4 @@
 <script>
-// @ts-nocheck
-
-  import '../../styles/lobby.css';
   import { onMount, onDestroy } from 'svelte';
   import { supabase } from '$lib/supabaseClient';
   import { goto } from '$app/navigation';
@@ -203,15 +200,6 @@
       // Only admin can start the game when all conditions are met
       if (roomData?.admin_id === userId && currentRoom?.status === 'waiting') {
         console.log('✨ All conditions met for game start!');
-        
-        // Set room status to 'starting'
-        const { error: startingError } = await supabase
-          .from('rooms')
-          .update({ status: 'starting' })
-          .eq('id', roomId);
-
-        if (startingError) throw startingError;
-
         return await handleGameStart();
       }
 
@@ -423,8 +411,8 @@
       readyStatus = `${readyCount}/${players.length} players ready`;
       console.log('📊 Ready status:', readyStatus);
 
-      // Only check all players ready if everyone is ready, game hasn't started, and current user is admin
-      if (readyCount === players.length && readyCount >= 2 && !gameStarted && userId === roomData?.admin_id) {
+      // Only check all players ready if everyone is ready and game hasn't started
+      if (readyCount === players.length && readyCount >= 2 && !gameStarted) {
         console.log('✨ All players ready, checking conditions...');
         await checkAllPlayersReady();
       }
@@ -503,9 +491,22 @@ async function updateGameModeStatus() {
             // Handle game start for all users
             if (payload.new.status === 'playing' && !gameStarted) {
               await startGameForAllUsers();
-            } else if (payload.new.status === 'starting') {
-              console.log('🎮 Game is starting...');
-              // You might want to show a loading indicator here
+            } else if (payload.new.status === 'waiting') {
+              // Reset game state if the room status is set back to waiting
+              gameStarted = false;
+              currentGameState.set({
+                deckName: '',
+                currentCardIndex: 0,
+                totalCards: 0,
+                isDrawPhase: false
+              });
+            }
+
+            // Update game mode for all users
+            if (payload.new.game_mode !== selectedGameMode) {
+              selectedGameMode = payload.new.game_mode;
+              currentGameMode.set(payload.new.game_mode);
+              await updateCardCount(payload.new.game_mode);
             }
           }
         })
@@ -664,7 +665,6 @@ async function updateGameModeStatus() {
   }
 
   async function loadGameSession() {
-    console.log('🔍 Attempting to load game session for room:', roomId);
     try {
       const { data: session, error } = await supabase
         .from('game_sessions')
@@ -675,50 +675,32 @@ async function updateGameModeStatus() {
 
       if (error) {
         if (error.code === 'PGRST116') {
-          console.log('❌ No active game session found for room:', roomId);
+          // No active session found, this is not necessarily an error
+          console.log('No active game session found');
           return null;
         }
         throw error;
       }
 
       if (session) {
-        console.log('✅ Found active game session:', {
-          sessionId: session.id,
-          roomId: session.room_id,
-          playerCount: session.player_sequence.length,
-          currentPlayerIndex: session.current_player_index,
-          isActive: session.is_active
+        gameSession = session;
+        currentPlayerIndex = session.current_player_index;
+        isMyTurn = session.player_sequence[session.current_player_index] === userId;
+        isCardRevealed = session.current_card_revealed;
+        gameStarted = true;
+
+        // Update game state
+        currentGameState.set({
+          deckName: roomData?.game_mode || '',
+          currentCardIndex: session.current_card_index,
+          totalCards: session.card_sequence?.length || 0,
+          isDrawPhase: isMyTurn && !isCardRevealed
         });
-
-        if (session.room_id === roomId) {
-          gameSession = session;
-          currentPlayerIndex = session.current_player_index;
-          isMyTurn = session.player_sequence[session.current_player_index] === userId;
-          isCardRevealed = session.current_card_revealed;
-          gameStarted = true;
-
-          // Update game state
-          currentGameState.set({
-            deckName: roomData?.game_mode || '',
-            currentCardIndex: session.current_card_index,
-            totalCards: session.card_sequence?.length || 0,
-            isDrawPhase: isMyTurn && !isCardRevealed
-          });
-        } else {
-          console.log('⚠️ Found session does not match current room', {
-            sessionRoomId: session.room_id,
-            currentRoomId: roomId
-          });
-          return null;
-        }
-      } else {
-        console.log('❌ No session data returned');
-        return null;
       }
 
       return session;
     } catch (err) {
-      console.error('💥 Error in loadGameSession:', err);
+      console.error('Error in loadGameSession:', err);
       return null;
     }
   }
@@ -832,48 +814,12 @@ async function updateGameModeStatus() {
   async function startGameForAllUsers() {
     console.log('🎬 Starting game for all users...');
     try {
-      // First, check if the room status is 'playing'
-      const { data: currentRoom, error: roomError } = await supabase
-        .from('rooms')
-        .select('status, game_session_id')
-        .eq('id', roomId)
-        .single();
-
-      if (roomError) throw roomError;
-
-      console.log('📊 Current room status:', {
-        status: currentRoom.status,
-        hasGameSession: !!currentRoom.game_session_id,
-        roomId: roomId
-      });
-
-      if (currentRoom.status !== 'playing' || !currentRoom.game_session_id) {
-        console.log('⏳ Room not ready for game start', {
-          status: currentRoom.status,
-          gameSessionId: currentRoom.game_session_id
-        });
-        return;
-      }
-
-      // Now load the game session
       const session = await loadGameSession();
-      console.log('🎮 Game session load result:', {
-        sessionFound: !!session,
-        matchesRoom: session?.room_id === roomId
-      });
-
-      if (session && session.room_id === roomId) {
+      if (session) {
         gameStarted = true;
         currentPlayerIndex = session.current_player_index;
         isMyTurn = session.player_sequence[session.current_player_index] === userId;
         isCardRevealed = session.current_card_revealed;
-
-        console.log('🎯 Game state updated for user:', {
-          userId,
-          isMyTurn,
-          currentPlayerIndex,
-          isCardRevealed
-        });
 
         // Update game state
         currentGameState.set({
@@ -894,7 +840,6 @@ async function updateGameModeStatus() {
 
           if (cardError) throw cardError;
           currentCard = cardData;
-          console.log('🃏 First card loaded successfully');
         }
 
         console.log('✅ Game started successfully for all users');
@@ -902,11 +847,8 @@ async function updateGameModeStatus() {
         // Redirect to game page
         goto(`/game/${roomId}`);
       } else {
-        console.error('❌ No active game session found for this room', {
-          roomId,
-          sessionRoomId: session?.room_id
-        });
-        error = 'Failed to start game. No active session found for this room.';
+        console.error('❌ No active game session found');
+        error = 'Failed to start game. No active session found.';
       }
     } catch (err) {
       console.error('💥 Error starting game for all users:', err);
@@ -1013,7 +955,6 @@ async function updateGameModeStatus() {
                                 <div class="loading-animation">
                                   <div class="card-stack">
                                     {#each Array(3) as _, i}
-                                      <!-- svelte-ignore element_invalid_self_closing_tag -->
                                       <div 
                                         class="stacked-card" 
                                         style="--delay: {i * 150}ms; --offset: {i * 4}px"
