@@ -1,4 +1,7 @@
 <script>
+// @ts-nocheck
+
+  import '../../styles/lobby.css';
   import { onMount, onDestroy } from 'svelte';
   import { supabase } from '$lib/supabaseClient';
   import { goto } from '$app/navigation';
@@ -1339,6 +1342,7 @@ async function updateGameModeStatus() {
                                 <div class="loading-animation">
                                   <div class="card-stack">
                                     {#each Array(3) as _, i}
+                                      <!-- svelte-ignore element_invalid_self_closing_tag -->
                                       <div 
                                         class="stacked-card" 
                                         style="--delay: {i * 150}ms; --offset: {i * 4}px"

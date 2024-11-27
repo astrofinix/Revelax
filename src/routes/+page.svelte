@@ -10,6 +10,8 @@
   import { Label } from '$lib/components/ui/label';
   import { onMount } from 'svelte';
 
+  import 'animate.css';
+
   let termsAccepted = false;
   let showTerms = false;
   let isFirstVisit = true;
@@ -92,19 +94,22 @@
   <div class="relative z-10 min-h-screen flex items-center justify-center p-1">
     <Card.Root class="w-full max-w-md bg-card/95 backdrop-blur-lg border border-border">
       <Card.Header class="space-y-1">
-        <Card.Title class="signature-font text-6xl font-bold tracking-tight text-card-foreground text-center revelax-title mt-[0.5em]">
+        <Card.Title class="signature-font text-6xl font-bold tracking-tight text-card-foreground text-center revelax-title mt-[0.5em] animate__animated animate__fadeIn">
           Revelax
         </Card.Title>
-        <Card.Description class="sans-font font-[600] text-center text-muted-foreground ">
+        <Card.Description class="sans-font font-[600] text-center text-muted-foreground
+                                 animate__animated animate__fadeInDown animate__slow">
           Where conversations begin.
         </Card.Description>
       </Card.Header>
 
       <Card.Content class="px-6 pb-1">
         <div class="flex justify-center">
-          <img class="pb-10" src="./revelax.gif" alt="A fun GIF" width="160">
+          <img class="pb-10 animate__animated animate__fadeIn animate__delay-2s"
+               src="./revelax.gif" alt="A fun GIF" width="160">
         </div>
-        <div class="flex justify-center space-x-2">
+        <div class="flex justify-center space-x-2
+                    animate__animated animate__fadeIn animate__delay-1s animate__slower">
           <Checkbox 
             id="terms" 
             bind:checked={termsAccepted}
@@ -134,7 +139,9 @@
         <Button 
           variant="default"
           size="lg"
-          class="sans-font font-[600] w-full text-lg py-6 bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          class="sans-font font-[600] w-full text-lg py-6 bg-primary text-primary-foreground
+                 hover:bg-primary/90 disabled:opacity-50
+                 animate__animated animate__fadeInUp animate__delay-1s animate__fast"
           on:click={() => handleRoomAction('create')}
           disabled={!termsAccepted}
         >
@@ -146,7 +153,9 @@
         <Button 
           variant="secondary"
           size="lg"
-          class="w-full text-lg py-6 bg-secondary text-secondary-foreground hover:bg-secondary/80 disabled:opacity-50"
+          class="w-full text-lg py-6 bg-secondary text-secondary-foreground
+                 hover:bg-secondary/80 disabled:opacity-50
+                 animate__animated animate__fadeInDown animate__delay-1s animate__fast"
           on:click={() => handleRoomAction('join')}
           disabled={!termsAccepted}
         >
@@ -165,10 +174,16 @@
         }
       }}
     >
-      <Dialog.Content class="max-w-md max-h-[80vh] overflow-y-auto ">
-        <Dialog.Header class="space-y-3 py-3 px-3 ">
-          <Dialog.Title class="text-2xl font-bold signature-font">Welcome to Revelax! 👋</Dialog.Title>
-          <Dialog.Description class="text-muted-foreground text-justify">
+      <Dialog.Content class="max-w-md max-h-[80vh] overflow-y-auto overflow-x-hidden">
+        <Dialog.Header class="space-y-3 py-3 px-3">
+          <Dialog.Title
+            class="text-2xl font-bold signature-font
+                 animate__animated animate__fadeInDown">
+            Welcome to Revelax! 👋
+          </Dialog.Title>
+          <Dialog.Description
+            class="text-muted-foreground text-justify
+                 animate__animated animate__fadeIn">
             Before we start having fun, here's a quick overview of how we can make this a great experience for everyone.
 
             <p class="text-muted-foreground mt-5">Updated: {new Date().toLocaleDateString()}</p>
@@ -176,14 +191,14 @@
         </Dialog.Header>
 
         <div class="space-y-6 mt-[-1em] py-3 px-3 text-sm text-justify">
-          <div class="space-y-2">
+          <div class="space-y-2 animate__animated animate__fadeInRight animate__faster">
             <h3 class="text-base font-medium text-foreground">🤝 Playing Together</h3>
             <p class="text-muted-foreground">
               By joining Revelax, you're becoming part of our community of people who love meaningful conversations and fun interactions!
             </p>
           </div>
 
-          <div class="space-y-2">
+          <div class="space-y-2 animate__animated animate__fadeInLeft animate__faster">
             <h3 class="text-base font-medium text-foreground">💭 Community Guidelines</h3>
             <p class="text-muted-foreground">Here's how we can make this fun for everyone:</p>
             <ul class="list-disc pl-4 space-y-2 mt-2 text-muted-foreground">
@@ -195,7 +210,7 @@
             </ul>
           </div>
 
-          <div class="space-y-2">
+          <div class="space-y-2 animate__animated animate__fadeInRight animate__faster">
             <h3 class="text-base font-medium text-foreground">🔒 Your Privacy Matters</h3>
             <p class="text-muted-foreground">
               We care about your privacy and keep your information safe. We only collect what's needed to make your experience awesome!
