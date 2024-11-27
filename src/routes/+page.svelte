@@ -177,14 +177,14 @@
 
         <div class="space-y-6 mt-[-1em] py-3 px-3 text-sm text-justify">
           <div class="space-y-2">
-            <h3 class="text-lg font-medium text-foreground signature-font">🤝 Playing Together</h3>
+            <h3 class="text-base font-medium text-foreground">🤝 Playing Together</h3>
             <p class="text-muted-foreground">
               By joining Revelax, you're becoming part of our community of people who love meaningful conversations and fun interactions!
             </p>
           </div>
 
           <div class="space-y-2">
-            <h3 class="text-lg font-medium text-foreground signature-font">💭 Community Guidelines</h3>
+            <h3 class="text-base font-medium text-foreground">💭 Community Guidelines</h3>
             <p class="text-muted-foreground">Here's how we can make this fun for everyone:</p>
             <ul class="list-disc pl-4 space-y-2 mt-2 text-muted-foreground">
               <li>When in doubt about the card, use you best judgement, deer🦌.</li>
@@ -196,7 +196,7 @@
           </div>
 
           <div class="space-y-2">
-            <h3 class="text-lg font-medium text-foreground signature-font">🔒 Your Privacy Matters</h3>
+            <h3 class="text-base font-medium text-foreground">🔒 Your Privacy Matters</h3>
             <p class="text-muted-foreground">
               We care about your privacy and keep your information safe. We only collect what's needed to make your experience awesome!
             </p>
