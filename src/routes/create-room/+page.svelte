@@ -146,7 +146,7 @@
 <div class="relative min-h-screen w-full bg-background flex items-center justify-center p-4">
   <Card.Root class="w-full max-w-md bg-card/95 backdrop-blur-lg border border-border">
     <Card.Header>
-      <Card.Title class="text-2xl font-bold text-center text-foreground/90">
+      <Card.Title class="text-3xl font-bold text-center text-foreground/90 signature-font">
         Create Room
       </Card.Title>
       <Card.Description class="text-center text-muted-foreground/70">
