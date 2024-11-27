@@ -498,53 +498,27 @@ async function updateGameModeStatus() {
             roomData = { ...payload.new };
             
             // Handle game start for all users
-            if (payload.new.status === 'playing' && !gameStarted) {
+            if (payload.new.status === 'playing' && !gameStarted && payload.new.game_session_id) {
+              console.log('🎮 Game is now in playing state with session:', payload.new.game_session_id);
               await startGameForAllUsers();
-            } else if (payload.new.status === 'starting') {
-              console.log('🎮 Game is starting...');
-              // You might want to show a loading indicator here
             }
           }
         })
         .subscribe();
 
-      // Player status subscription (existing code)
-      const playerChannel = supabase.channel(`players_${roomId}`)
-        .on('postgres_changes', {
-          event: '*',
-          schema: 'public',
-          table: 'players',
-          filter: `room_id=eq.${roomId}`
-        }, async (payload) => {
-          console.log('👥 Player update received:', payload);
-          await handlePlayerStateChange(payload);
-        })
-        .subscribe();
-
-      // Game session subscription with enhanced payload handling
-      const gameChannel = supabase.channel(`game_${roomId}`)
-        .on('postgres_changes', {
-          event: '*',
-          schema: 'public',
-          table: 'game_sessions',
-          filter: `room_id=eq.${roomId}`
-        }, async (payload) => {
-          console.log('📡 Game session update received:', payload);
-          if (payload.new) {
-            // Handle all game session changes
-            await handleGameStateChange(payload);
-          }
-        })
-        .subscribe();
+      // Add error handling for subscription
+      roomChannel.onError((err) => {
+        console.error('Room channel error:', err);
+        setupSubscriptions(); // Attempt to reconnect
+      });
 
       return () => {
         roomChannel.unsubscribe();
-        playerChannel.unsubscribe();
-        gameChannel.unsubscribe();
       };
     } catch (err) {
       console.error('💥 Error in setupSubscriptions:', err);
-      throw err;
+      // Attempt to reconnect after a delay
+      setTimeout(setupSubscriptions, 5000);
     }
   }
 
@@ -838,41 +812,36 @@ async function updateGameModeStatus() {
 
       if (roomError) throw roomError;
 
-      console.log('📊 Current room status:', {
-        status: currentRoom.status,
-        hasGameSession: !!currentRoom.game_session_id,
-        roomId: roomId
-      });
+      console.log('📊 Current room state:', currentRoom);
 
-      if (currentRoom.status !== 'playing' || !currentRoom.game_session_id) {
-        console.log('⏳ Room not ready for game start', {
-          status: currentRoom.status,
-          gameSessionId: currentRoom.game_session_id
-        });
+      if (!currentRoom.game_session_id) {
+        console.log('⚠️ No game session ID found in room');
         return;
       }
 
       // Now load the game session
       const session = await loadGameSession();
-      console.log('🎮 Game session load result:', {
-        sessionFound: !!session,
-        matchesRoom: session?.room_id === roomId
+      
+      if (!session) {
+        console.log('⚠️ No active session found');
+        return;
+      }
+
+      console.log('✅ Game session loaded:', {
+        sessionId: session.id,
+        roomId: session.room_id,
+        status: currentRoom.status
       });
 
       if (session && session.room_id === roomId) {
+        // Set game state before navigation
         gameStarted = true;
+        gameSession = session;
         currentPlayerIndex = session.current_player_index;
         isMyTurn = session.player_sequence[session.current_player_index] === userId;
         isCardRevealed = session.current_card_revealed;
 
-        console.log('🎯 Game state updated for user:', {
-          userId,
-          isMyTurn,
-          currentPlayerIndex,
-          isCardRevealed
-        });
-
-        // Update game state
+        // Update game state store
         currentGameState.set({
           deckName: roomData.game_mode,
           currentCardIndex: session.current_card_index,
@@ -880,30 +849,17 @@ async function updateGameModeStatus() {
           isDrawPhase: isMyTurn && !isCardRevealed
         });
 
-        // Load first card
-        if (session.current_card) {
-          const { data: cardData, error: cardError } = await supabase
-            .from('game_cards')
-            .select('content')
-            .eq('game_mode', roomData.game_mode)
-            .eq('card_index', session.current_card)
-            .single();
-
-          if (cardError) throw cardError;
-          currentCard = cardData;
-          console.log('🃏 First card loaded successfully');
+        // Store game session ID in localStorage
+        if (browser) {
+          localStorage.setItem('gameSessionId', session.id);
         }
 
-        console.log('✅ Game started successfully for all users');
+        console.log('🎮 Navigating to game page...');
         
-        // Redirect to game page
-        goto(`/game/${roomId}`);
-      } else {
-        console.error('❌ No active game session found for this room', {
-          roomId,
-          sessionRoomId: session?.room_id
-        });
-        error = 'Failed to start game. No active session found for this room.';
+        // Use a timeout to ensure state is updated before navigation
+        setTimeout(() => {
+          goto(`/game/${roomId}`);
+        }, 100);
       }
     } catch (err) {
       console.error('💥 Error starting game for all users:', err);
@@ -915,6 +871,28 @@ async function updateGameModeStatus() {
     clearInterval(updateInterval);
     updateInterval = null;
   }
+
+  onDestroy(() => {
+    if (updateInterval) {
+      clearInterval(updateInterval);
+    }
+    
+    // Clean up subscriptions
+    if (typeof cleanupSubscriptions === 'function') {
+      cleanupSubscriptions();
+    }
+
+    // Store current game state if game has started
+    if (gameStarted && browser) {
+      localStorage.setItem('gameState', JSON.stringify({
+        gameStarted,
+        currentPlayerIndex,
+        isMyTurn,
+        isCardRevealed,
+        gameSessionId: gameSession?.id
+      }));
+    }
+  });
 
 </script>
 
