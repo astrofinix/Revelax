@@ -16,8 +16,6 @@
   import { writable, derived } from 'svelte/store';
 
 
-
-  let hasCurrentCard = null;
   let players = [];
   let roomData = null;
   let isReady = false;
@@ -181,7 +179,6 @@
       // Don't proceed if game is already in progress or starting
       if (currentRoom?.status === 'playing' || currentRoom?.status === 'starting' || gameStarted) {
         console.log('⚠️ Game already in progress or starting, status:', currentRoom?.status);
-        handleGameStart();
         // return false;
       }
 
@@ -666,6 +663,7 @@ async function updateGameModeStatus() {
   }
 
   async function loadGameSession() {
+    console.log('🔍 Attempting to load game session for room:', roomId);
     try {
       const { data: session, error } = await supabase
         .from('game_sessions')
@@ -675,20 +673,51 @@ async function updateGameModeStatus() {
         .single();
 
       if (error) {
-        console.error('Error loading game session:', error);
+        if (error.code === 'PGRST116') {
+          console.log('❌ No active game session found for room:', roomId);
+          return null;
+        }
         throw error;
       }
 
-      if (!session) {
-        console.error('No active game session found for room:', roomId);
+      if (session) {
+        console.log('✅ Found active game session:', {
+          sessionId: session.id,
+          roomId: session.room_id,
+          playerCount: session.player_sequence.length,
+          currentPlayerIndex: session.current_player_index,
+          isActive: session.is_active
+        });
+
+        if (session.room_id === roomId) {
+          gameSession = session;
+          currentPlayerIndex = session.current_player_index;
+          isMyTurn = session.player_sequence[session.current_player_index] === userId;
+          isCardRevealed = session.current_card_revealed;
+          gameStarted = true;
+
+          // Update game state
+          currentGameState.set({
+            deckName: roomData?.game_mode || '',
+            currentCardIndex: session.current_card_index,
+            totalCards: session.card_sequence?.length || 0,
+            isDrawPhase: isMyTurn && !isCardRevealed
+          });
+        } else {
+          console.log('⚠️ Found session does not match current room', {
+            sessionRoomId: session.room_id,
+            currentRoomId: roomId
+          });
+          return null;
+        }
+      } else {
+        console.log('❌ No session data returned');
         return null;
       }
 
-      console.log('Loaded game session:', session);
-      gameSession = session;
       return session;
     } catch (err) {
-      console.error('Error in loadGameSession:', err);
+      console.error('💥 Error in loadGameSession:', err);
       return null;
     }
   }
@@ -696,61 +725,11 @@ async function updateGameModeStatus() {
   async function handleGameStart() {
     console.log('🎮 Initiating game start...');
     try {
-      // Check for existing active session
-      const { data: existingSession } = await supabase
-        .from('game_sessions')
-        .select('*')
-        .eq('room_id', roomId)
-        .eq('is_active', true)
-        .single();
-
-      if (existingSession) {
-        console.log('⚠️ Active session already exists:', existingSession.id);
-        
-        // Update local game state with existing session
-        gameSession = existingSession;
-        gameStarted = true;
-        currentPlayerIndex = existingSession.current_player_index;
-        isMyTurn = existingSession.player_sequence[existingSession.current_player_index] === userId;
-        isCardRevealed = existingSession.current_card_revealed;
-
-        // Load current card data
-        if (existingSession.current_card) {
-          const { data: cardData, error: cardError } = await supabase
-            .from('game_cards')
-            .select('content')
-            .eq('game_mode', roomData.game_mode)
-            .eq('card_index', existingSession.current_card)
-            .single();
-
-          if (cardError) throw cardError;
-          currentCard = cardData;
-        }
-
-        // Update game state
-        currentGameState.set({
-          deckName: roomData.game_mode,
-          currentCardIndex: existingSession.current_card_index,
-          totalCards: existingSession.card_sequence.length,
-          isDrawPhase: isMyTurn && !isCardRevealed
-        });
-
-        console.log('✨ Game state updated with existing session!', {
-          isMyTurn,
-          currentPlayerIndex,
-          isCardRevealed,
-          isDrawPhase: isMyTurn && !isCardRevealed
-        });
-
-        return true;
-      }
-
       // 1. Update room status to 'starting'
       const { error: roomUpdateError } = await supabase
         .from('rooms')
         .update({ status: 'starting' })
-        .eq('id', roomId)
-        .eq('status', 'waiting'); // Only update if status is 'waiting'
+        .eq('id', roomId);
 
       if (roomUpdateError) throw roomUpdateError;
 
@@ -840,6 +819,11 @@ async function updateGameModeStatus() {
     } catch (err) {
       console.error('💥 Error in handleGameStart:', err);
       error = 'Failed to start game. Please try again.';
+      // Revert room status to 'waiting' if there's an error
+      await supabase
+        .from('rooms')
+        .update({ status: 'waiting' })
+        .eq('id', roomId);
       return false;
     }
   }
@@ -936,313 +920,6 @@ async function updateGameModeStatus() {
         gameSessionId: gameSession?.id
       }));
     }
-  });
-
-  async function handleCardReveal() {
-    if (!isMyTurn || isCardRevealed || isLoading) {
-      console.log('⚠ Card reveal blocked:', { isMyTurn, isCardRevealed, isLoading });
-      return;
-    }
-    
-    isLoading = true;
-    
-    try {
-      // Get the current card index from the game session
-      const currentCardIndex = gameSession.card_sequence[gameSession.current_card_index];
-      
-      // Fetch the card content
-      const { data: cardData, error: cardError } = await supabase
-        .from('game_cards')
-        .select('*')  // Select all fields to get both content and card_index
-        .eq('game_mode', roomData.game_mode)
-        .eq('card_index', currentCardIndex)
-        .single();
-
-      if (cardError) throw cardError;
-
-      // Update game session to mark card as revealed and include card content
-      const { error: updateError } = await supabase
-        .from('game_sessions')
-        .update({
-          current_card_revealed: true,
-          current_card: cardData.card_index,  // Store the card index
-          last_update: new Date().toISOString()
-        })
-        .eq('id', gameSession.id);
-
-      if (updateError) throw updateError;
-      
-      // Update local state
-      currentCard = cardData;
-      isCardRevealed = true;
-      
-      console.log('✅ Card revealed:', cardData);
-    } catch (err) {
-      console.error('💥 Error revealing card:', err);
-      error = 'Failed to reveal card';
-    } finally {
-      isLoading = false;
-    }
-  }
-
-  // Update the reactive statement to properly handle draw phase
-  $: if (gameStarted) {
-    const newDrawPhase = isMyTurn && !isCardRevealed && currentCard !== null;
-    console.log('🎲 Game state update:', {
-      isMyTurn,
-      isCardRevealed,
-      hasCurrentCard: currentCard !== null,
-      newDrawPhase,
-      currentPlayerIndex,
-      userId,
-      playerSequence: gameSession?.player_sequence,
-      currentPlayer: gameSession?.player_sequence[currentPlayerIndex]
-    });
-
-    // Update all local states
-    currentGameState.update(state => {
-      const updatedState = {
-        ...state,
-        isDrawPhase: newDrawPhase,
-        deckName: roomData?.game_mode || state.deckName,
-        currentCardIndex: gameSession?.current_card_index || state.currentCardIndex,
-        totalCards: gameSession?.card_sequence?.length || state.totalCards
-      };
-      console.log(' Updated game state:', updatedState);
-      return updatedState;
-    });
-
-    // Ensure local state variables are in sync
-    if (gameSession) {
-      currentPlayerIndex = gameSession.current_player_index;
-      isMyTurn = gameSession.player_sequence[currentPlayerIndex] === userId;
-      isCardRevealed = gameSession.current_card_revealed;
-    }
-  }
-
-  // Add a reactive statement to handle currentCard updates
-  $: {
-    if (gameSession && !currentCard) {
-      console.log('🃏 Loading current card...', {
-        gameMode: roomData?.game_mode,
-        currentCardIndex: gameSession.current_card
-      });
-      loadCurrentCard();
-    }
-  }
-
-  // Add helper function to load current card
-  async function loadCurrentCard() {
-    if (!gameSession || !roomData) return;
-    
-    try {
-      const { data: cardData, error: cardError } = await supabase
-        .from('game_cards')
-        .select('content')
-        .eq('game_mode', roomData.game_mode)
-        .eq('card_index', gameSession.current_card)
-        .single();
-
-      if (cardError) throw cardError;
-      
-      console.log('✅ Card loaded:', cardData);
-      currentCard = cardData;
-    } catch (err) {
-      console.error('💥 Error loading card:', err);
-    }
-  }
-
-  // Add this function near your other helper functions
-  function isLastCard() {
-    if (!gameSession?.card_sequence) return false;
-    return gameSession.current_card_index === gameSession.card_sequence.length - 1;
-  }
-
-  onMount(() => {
-    const gameSessionSubscription = supabase
-      .from(`game_sessions:id=eq.${gameSession.id}`)
-      .on('UPDATE', payload => {
-        console.log('🔔 Game session updated:', payload.new);
-        gameSession = payload.new;
-        updateLocalGameState();
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeSubscription(gameSessionSubscription);
-    };
-  });
-
-  function updateLocalGameState() {
-    currentCard = gameSession.current_card_revealed ? { content: gameSession.current_card_content } : null;
-    isCardRevealed = gameSession.current_card_revealed;
-    currentGameState.set({
-      deckName: roomData.game_mode,
-      currentCardIndex: gameSession.current_card_index,
-      totalCards: gameSession.card_sequence.length,
-      isDrawPhase: isMyTurn && !isCardRevealed
-    });
-  }
-
-  async function handleGameEnd() {
-    console.log('🏁 Handling game end...');
-    isLoading = true;
-
-    try {
-      // 1. Update game session to inactive
-      const { error: sessionError } = await supabase
-        .from('game_sessions')
-        .update({
-          is_active: false,
-          last_update: new Date().toISOString()
-        })
-        .eq('id', gameSession.id);
-
-      if (sessionError) throw sessionError;
-
-      // 2. Update room status
-      const { error: roomError } = await supabase
-        .from('rooms')
-        .update({
-          status: 'waiting',
-          game_session_id: null
-        })
-        .eq('id', roomId);
-
-      if (roomError) throw roomError;
-
-      // 3. Reset local game state
-      gameStarted = false;
-      gameSession = null;
-      currentCard = null;
-      isMyTurn = false;
-      isCardRevealed = false;
-      currentPlayerIndex = 0;
-
-      // 4. Reset game state store
-      currentGameState.set({
-        deckName: '',
-        currentCardIndex: 0,
-        totalCards: 0,
-        isDrawPhase: false
-      });
-
-      console.log('✅ Game ended successfully');
-
-      // 5. Redirect to lobby or show end game screen
-      goto(`/lobby/${roomId}`);
-    } catch (err) {
-      console.error('💥 Error ending game:', err);
-      error = 'Failed to end game';
-    } finally {
-      isLoading = false;
-    }
-  }
-
-  async function handleEndTurn() {
-    console.log('🔄 Handling end turn...');
-    if (!isMyTurn || !isCardRevealed || isLoading) {
-      console.log('⚠ End turn blocked:', { isMyTurn, isCardRevealed, isLoading });
-      return;
-    }
-
-    isLoading = true;
-
-    try {
-      // Calculate next player index
-      const nextPlayerIndex = (currentPlayerIndex + 1) % gameSession.player_sequence.length;
-      const nextCardIndex = gameSession.current_card_index + 1;
-      const nextCard = gameSession.card_sequence[nextCardIndex];
-
-      console.log('📊 Turn transition:', {
-        currentIndex: currentPlayerIndex,
-        nextIndex: nextPlayerIndex,
-        nextCardIndex,
-        nextCard
-      });
-
-      // Update game session
-      const { error: updateError } = await supabase
-        .from('game_sessions')
-        .update({
-          current_player_index: nextPlayerIndex,
-          current_card_index: nextCardIndex,
-          current_card: nextCard,
-          current_card_revealed: false,
-          last_update: new Date().toISOString()
-        })
-        .eq('id', gameSession.id);
-
-      if (updateError) throw updateError;
-
-      // Update local state
-      currentPlayerIndex = nextPlayerIndex;
-      isMyTurn = gameSession.player_sequence[nextPlayerIndex] === userId;
-      isCardRevealed = false;
-      currentCard = null;
-
-      console.log('✅ Turn ended successfully:', {
-        nextPlayer: players[nextPlayerIndex]?.username,
-        isMyTurn,
-        currentCardIndex: nextCardIndex
-      });
-
-    } catch (err) {
-      console.error('💥 Error ending turn:', err);
-      error = 'Failed to end turn';
-    } finally {
-      isLoading = false;
-    }
-  }
-
-  onMount(() => {
-    const gameSessionSubscription = supabase
-      .channel(`game_sessions:${gameSession?.id}`)
-      .on('postgres_changes', 
-        { 
-          event: 'UPDATE', 
-          schema: 'public', 
-          table: 'game_sessions',
-          filter: `id=eq.${gameSession?.id}`
-        }, 
-        async (payload) => {
-          console.log('🔄 Game session updated:', payload.new);
-          
-          // Update game session data
-          gameSession = payload.new;
-          
-          // Update local state based on game session changes
-          currentPlayerIndex = payload.new.current_player_index;
-          isMyTurn = payload.new.player_sequence[currentPlayerIndex] === userId;
-          isCardRevealed = payload.new.current_card_revealed;
-          
-          // If card is revealed, fetch and update card content
-          if (payload.new.current_card_revealed && !currentCard) {
-            const { data: cardData } = await supabase
-              .from('game_cards')
-              .select('*')
-              .eq('game_mode', roomData.game_mode)
-              .eq('card_index', payload.new.current_card)
-              .single();
-              
-            if (cardData) {
-              currentCard = cardData;
-            }
-          }
-          
-          // Update game state store
-          currentGameState.update(state => ({
-            ...state,
-            isDrawPhase: isMyTurn && !isCardRevealed,
-            currentCardIndex: payload.new.current_card_index,
-            totalCards: payload.new.card_sequence.length
-          }));
-        })
-        .subscribe();
-
-    return () => {
-      supabase.removeChannel(gameSessionSubscription);
-    };
   });
 
 </script>
@@ -1342,7 +1019,7 @@ async function updateGameModeStatus() {
                                       <div 
                                         class="stacked-card" 
                                         style="--delay: {i * 150}ms; --offset: {i * 4}px"
-                                      ></div>
+                                      />
                                     {/each}
                                   </div>
                                 </div>
@@ -1353,6 +1030,7 @@ async function updateGameModeStatus() {
                             {/if}
                           </div>
                         </div>
+
                         <!-- Face-up state -->
                         <div class="card-face card-back absolute inset-0">
                           {#if isCardRevealed && currentCard?.content}
@@ -1710,170 +1388,4 @@ async function updateGameModeStatus() {
     transform: scale(1);
     box-shadow: 0 0 0 0 rgba(var(--primary) / 0);
   }
-}
-:global(body) {
-    margin: 0;
-    padding: 0;
-    overflow-x: hidden;
-    background-color: hsl(var(--background));
-    color: hsl(var(--foreground));
-  }
-
-  :global(.card) {
-    background-color: hsl(var(--card));
-    color: hsl(var(--card-foreground));
-    border: 1px solid hsl(var(--border));
-    animation: fadeIn 0.5s ease-out;
-  }
-
-  /* Scrollbar styles */
-  div::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  div::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  div::-webkit-scrollbar-thumb {
-    background-color: hsl(var(--primary) / 0.2);
-    border-radius: 20px;
-  }
-
-  @keyframes fadeIn {
-    from {
-      opacity: 0;
-      transform: translateY(20px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  svg {
-    height: 100%;
-    width: 100%;
-    mix-blend-mode: screen;
-    opacity: 0.7;
-  }
-
-  .card-container {
-    width: 100%;
-    padding: 1rem;
-  }
-
-  .game-card {
-    @apply bg-card rounded-xl transition-all duration-300 ease-out;
-    border: 1px solid hsl(var(--border));
-    min-height: 400px;
-    perspective: 1000px;
-  }
-
-  .game-card:not(:disabled).active {
-    @apply cursor-pointer hover:border-primary/50;
-  }
-
-  .game-card:not(:disabled).active:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1),
-                0 8px 10px -6px rgb(0 0 0 / 0.1);
-  }
-
-  .card-inner {
-    position: relative;
-    width: 100%;
-    height: 100%;
-    transform-style: preserve-3d;
-    transition: transform 0.6s cubic-bezier(0.23, 1, 0.32, 1);
-  }
-
-  .card-inner.revealed {
-    transform: rotateY(180deg);
-  }
-
-  .card-face {
-    position: absolute;
-    width: 100%;
-    height: 100%;
-    backface-visibility: hidden;
-    @apply rounded-xl overflow-hidden;
-  }
-
-  .card-back {
-    transform: rotateY(180deg);
-  }
-
-  .card-content-wrapper {
-    @apply bg-card/50 backdrop-blur-sm rounded-lg p-6;
-    border: 1px solid hsl(var(--border));
-  }
-
-  .loading-card-state {
-    @apply flex flex-col items-center justify-center;
-  }
-
-  .loading-animation {
-    @apply relative w-24 h-32 mb-4;
-  }
-
-  .card-stack {
-    @apply relative w-full h-full;
-    perspective: 1000px;
-  }
-
-  .stacked-card {
-    @apply absolute inset-0 rounded-xl border border-primary/20;
-    background: linear-gradient(
-      135deg,
-      hsl(var(--primary) / 0.1),
-      hsl(var(--primary) / 0.05)
-    );
-    animation: float 2s ease-in-out infinite;
-    animation-delay: var(--delay);
-    transform: translateY(var(--offset)) scale(0.95);
-    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1),
-                0 2px 4px -2px rgb(0 0 0 / 0.1);
-  }
-
-  @keyframes float {
-    0%, 100% {
-      transform: translateY(var(--offset)) scale(0.95);
-    }
-    50% {
-      transform: translateY(calc(var(--offset) - 8px)) scale(0.95);
-    }
-  }
-
-  .game-card {
-    @apply bg-card rounded-xl transition-all duration-300 ease-out;
-    border: 1px solid hsl(var(--border));
-    min-height: 400px;
-    perspective: 1000px;
-  }
-
-  .game-card:not(:disabled).active {
-    @apply cursor-pointer hover:border-primary/50;
-    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-  }
-
-  @keyframes pulse {
-    0%, 100% {
-      box-shadow: 0 0 0 0 hsl(var(--primary) / 0.3);
-    }
-    50% {
-      box-shadow: 0 0 0 8px hsl(var(--primary) / 0);
-    }
-  }
-
-  .card-inner {
-    position: relative;
-    transform-style: preserve-3d;
-    transition: transform 0.6s cubic-bezier(0.23, 1, 0.32, 1);
-  }
-
-  .card-face {
-    backface-visibility: hidden;
-    @apply rounded-xl overflow-hidden;
-  }
-  </style>
+}</style>
