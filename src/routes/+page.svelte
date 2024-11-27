@@ -1,4 +1,6 @@
 <script>
+// @ts-nocheck
+
   import { goto } from '$app/navigation';
   import * as Card from '$lib/components/ui/card';
   import { Button } from '$lib/components/ui/button';
@@ -163,17 +165,17 @@
         }
       }}
     >
-      <Dialog.Content class="max-w-md max-h-[80vh] overflow-y-auto">
-        <Dialog.Header class="space-y-3 pb-2">
-          <Dialog.Title class="text-2xl font-semibold">Welcome to Revelax! 👋</Dialog.Title>
-          <Dialog.Description class="text-muted-foreground">
+      <Dialog.Content class="max-w-md max-h-[80vh] overflow-y-auto ">
+        <Dialog.Header class="space-y-3 py-3 px-3 ">
+          <Dialog.Title class="text-2xl font-bold signature-font">Welcome to Revelax! 👋</Dialog.Title>
+          <Dialog.Description class="text-muted-foreground text-justify">
             Before we start having fun, here's a quick overview of how we can make this a great experience for everyone.
+
+            <p class="text-muted-foreground mt-5">Updated: {new Date().toLocaleDateString()}</p>
           </Dialog.Description>
         </Dialog.Header>
 
-        <div class="space-y-6 py-6">
-          <p class="text-muted-foreground">Updated: {new Date().toLocaleDateString()}</p>
-          
+        <div class="space-y-6 mt-[-1em] py-3 px-3 text-sm text-justify">
           <div class="space-y-2">
             <h3 class="text-base font-medium text-foreground">🤝 Playing Together</h3>
             <p class="text-muted-foreground">
