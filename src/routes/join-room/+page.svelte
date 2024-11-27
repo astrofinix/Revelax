@@ -1,4 +1,6 @@
 <script>
+// @ts-nocheck
+
   import { goto } from '$app/navigation';
   import { supabase } from '$lib/supabaseClient';
   import * as Card from '$lib/components/ui/card';
