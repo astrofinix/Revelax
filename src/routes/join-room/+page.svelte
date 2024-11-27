@@ -45,6 +45,7 @@
       if (!username) {
         log('No username found, redirecting to username page', 'error');
         localStorage.setItem('roomAction', 'join');
+        localStorage.setItem('pendingRoomCode', inviteCode); // Save the code
         goto('/username');
         return;
       }
@@ -54,8 +55,9 @@
       // Check if room exists and is active
       const { data: room, error: roomError } = await supabase
         .from('rooms')
-        .select('id, room_name, is_active')
+        .select('id, room_name, is_active, status')
         .eq('room_code', inviteCode)
+        .eq('is_active', true)  // Only get active rooms
         .single();
 
       if (roomError || !room) {
@@ -64,9 +66,23 @@
         return;
       }
 
-      if (!room.is_active) {
-        error = 'This room is no longer active.';
-        log('Room is inactive', 'error');
+      if (room.status === 'playing') {
+        error = 'Game already in progress.';
+        log('Game in progress', 'error');
+        return;
+      }
+
+      // Check if player already exists in this room
+      const { data: existingPlayer } = await supabase
+        .from('players')
+        .select('id')
+        .eq('room_id', room.id)
+        .eq('username', username)
+        .single();
+
+      if (existingPlayer) {
+        error = 'You are already in this room.';
+        log('Player already in room', 'error');
         return;
       }
 
@@ -74,7 +90,8 @@
       const { data: players, error: playersError } = await supabase
         .from('players')
         .select('id')
-        .eq('room_id', room.id);
+        .eq('room_id', room.id)
+        .eq('is_connected', true);  // Only count connected players
 
       if (playersError) {
         throw playersError;
@@ -87,18 +104,26 @@
         return;
       }
 
-      // Create player entry
+      // Generate a unique user ID
       const userId = crypto.randomUUID();
+
+      // Create player entry
       const { error: playerError } = await supabase
         .from('players')
         .insert({
           room_id: room.id,
           user_id: userId,
           username: username,
-          is_connected: true
+          is_connected: true,
+          is_ready: false
         });
 
       if (playerError) {
+        if (playerError.code === '23505') { // Unique constraint violation
+          error = 'You are already in this room.';
+          log('Player already in room', 'error');
+          return;
+        }
         throw playerError;
       }
 

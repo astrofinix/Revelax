@@ -15,7 +15,7 @@ CREATE TABLE public.rooms (
 );
 
 -- Game Sessions table
-CREATE TABLE public.game_sessions (
+CREATE TABLE IF NOT EXISTS game_sessions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     room_id UUID REFERENCES public.rooms(id) ON DELETE CASCADE,
     card_sequence INTEGER[] NOT NULL,
@@ -24,11 +24,13 @@ CREATE TABLE public.game_sessions (
     current_card_index INTEGER DEFAULT 0,
     current_player_index INTEGER DEFAULT 0,
     current_card_revealed BOOLEAN DEFAULT false,
+    game_started BOOLEAN DEFAULT false,
     is_active BOOLEAN DEFAULT true,
     started_at TIMESTAMPTZ DEFAULT NOW(),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     last_update TIMESTAMPTZ DEFAULT NOW()
 );
+
 -- Add partial index to ensure only one active session per room
 CREATE UNIQUE INDEX idx_unique_active_session_per_room 
 ON public.game_sessions (room_id) 
@@ -113,8 +115,19 @@ RETURNS json AS $$
 DECLARE
   v_session_id uuid;
   v_result json;
+  v_room_status text;
 BEGIN
-  -- Deactivate any existing sessions first
+  -- Check room status first
+  SELECT status INTO v_room_status
+  FROM rooms
+  WHERE id = p_room_id
+  FOR UPDATE;  -- Lock the row
+
+  IF v_room_status != 'starting' THEN
+    RAISE EXCEPTION 'Room not in starting state';
+  END IF;
+
+  -- Deactivate existing sessions and create new one
   UPDATE game_sessions
   SET is_active = false,
       last_update = p_started_at
@@ -130,6 +143,7 @@ BEGIN
     player_sequence,
     current_player_index,
     is_active,
+    game_started,
     started_at,
     last_update,
     current_card_revealed
@@ -142,17 +156,19 @@ BEGIN
     p_player_sequence,
     0,
     true,
+    true,
     p_started_at,
     p_started_at,
     false
   )
   RETURNING id INTO v_session_id;
 
-  -- Update room status
+  -- Update room status to playing
   UPDATE rooms
   SET status = 'playing',
       game_session_id = v_session_id
-  WHERE id = p_room_id;
+  WHERE id = p_room_id
+  AND status = 'starting';  -- Double check status
 
   -- Return the created session
   SELECT row_to_json(gs.*)
