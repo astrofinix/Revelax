@@ -22,11 +22,14 @@
 
   let hasCurrentCard = null;
   let players = [];
+  let totalCards = 5;
   let roomData = null;
   let isReady = false;
   let error = '';
   let isLoading = false;
   let readyStatus = '';
+  let isTurnActive = false;
+  let currentQuestion = '';
   let userId = browser ? localStorage.getItem('userId') : null;
   let roomId = browser ? localStorage.getItem('roomId') : null;
   let roomCode = browser ? localStorage.getItem('currentRoomCode') : null;
@@ -140,6 +143,109 @@
     }
   }
 
+  async function handleDrawCard() {
+    // Check if it's the current player's turn
+    if (players[currentPlayerIndex].user_id !== userId) {
+        console.log("It's not your turn!");
+        return;
+    }
+
+    // Simulate drawing a card (fetching a question)
+    const { data: questionData, error } = await supabase
+        .from('questions')
+        .select('*')
+        .order('random()') // Randomly select a question
+        .limit(1)
+        .single();
+
+    if (error) {
+        console.error('Error fetching question:', error);
+        return;
+    }
+
+    currentQuestion = questionData.question; // Assuming questionData has a 'question' field
+    drawnCardsCount++; // Increment the drawn cards count
+
+    // Sync the drawn question to all players
+    await syncQuestionToPlayers(currentQuestion);
+
+    // Check if it's the last card
+    if (drawnCardsCount >= totalCards) {
+        await endGameSession();
+    }
+  }
+
+  async function syncQuestionToPlayers(question) {
+    try {
+        // Notify all players about the drawn question
+        supabase
+            .channel(`question_${roomId}`)
+            .send('question_drawn', { question });
+
+        console.log(`Question synced to all players: ${question}`);
+    } catch (err) {
+        console.error('Error syncing question:', err);
+    }
+  }
+
+  // Function to end the game session and return players to the lobby
+  async function endGameSession() {
+      try {
+          // Notify players that the game is ending and they will return to the lobby
+          supabase
+              .channel(`game_${roomId}`)
+              .send('game_ended', { message: "The game has ended. Returning to lobby." });
+
+          // Optionally, you can implement logic to handle player state change to lobby
+          // Reset player states or update the database accordingly
+
+          // Delete the game session from the database
+          const { error: deleteError } = await supabase
+              .from('games')
+              .delete()
+              .eq('id', roomId);
+
+          if (deleteError) {
+              console.error('Error deleting game session:', deleteError);
+              return;
+          }
+
+          console.log('Game session deleted successfully. Players returned to lobby.');
+      } catch (err) {
+          console.error('Error ending game session:', err);
+      }
+  }
+
+  function endTurn() {
+      if (!isTurnActive) {
+          console.log("No active turn to end.");
+          return;
+      }
+
+      // Pass the turn to the next player
+      currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
+      isTurnActive = false; // Reset the turn active flag
+
+      console.log(`Turn passed to player: ${players[currentPlayerIndex].user_id}`);
+
+      // Optionally, you can notify all players about the turn change
+      syncTurnChange(players[currentPlayerIndex].user_id);
+  }
+
+  // Function to sync the turn change to all players
+  async function syncTurnChange(nextPlayerId) {
+      try {
+          // Notify all players about the turn change
+          supabase
+              .channel(`turn_${roomId}`)
+              .send('turn_changed', { nextPlayerId });
+
+          console.log(`Turn change synced to all players: Next player is ${nextPlayerId}`);
+      } catch (err) {
+          console.error('Error syncing turn change:', err);
+      }
+  }
+
   async function updateCardCount(gameMode) {
     try {
       const { count, error } = await supabase
@@ -169,6 +275,92 @@
     } catch (err) {
       console.error('Error loading players:', err);
     }
+  }
+
+  async function checkAndDeleteLobby() {
+    try {
+        // Load the current players in the room
+        const { data: currentPlayers, error } = await supabase
+            .from('players')
+            .select('*')
+            .eq('room_id', roomId);
+
+        if (error) throw error;
+
+        // Check if there are no players left
+        if (currentPlayers.length === 0) {
+            // Delete the lobby from the rooms table
+            const { error: deleteError } = await supabase
+                .from('rooms')
+                .delete()
+                .eq('id', roomId);
+
+            if (deleteError) {
+                console.error('Error deleting lobby:', deleteError);
+                return;
+            }
+
+            console.log('Lobby deleted successfully');
+            // Optionally navigate to another page or show a message
+            goto('/');
+        }
+    } catch (err) {
+        console.error('Error checking and deleting lobby:', err);
+    }
+  }
+
+  async function handlePlayerLeaveDuringGame() {
+    try {
+        if (!userId || !roomId) return;
+
+        // Remove player from the game session
+        const { error: leaveError } = await supabase
+            .from('players')
+            .delete()
+            .eq('user_id', userId)
+            .eq('room_id', roomId);
+
+        if (leaveError) throw leaveError;
+
+        console.log(`Player ${userId} has left the game session`);
+
+        // Notify other players about the player leaving
+        await syncPlayerLeave(userId);
+
+        // Optionally, you can call a function to check if the lobby should be deleted
+        await checkAndDeleteLobby(); // Check if the lobby should be deleted
+
+    } catch (err) {
+        console.error('Error handling player leave during game:', err);
+    }
+}
+
+  // Function to sync player leave to all players
+  async function syncPlayerLeave(playerId) {
+      try {
+          // Load the current players in the room after a player leaves
+          const { data: updatedPlayers, error } = await supabase
+              .from('players')
+              .select('*')
+              .eq('room_id', roomId);
+
+          if (error) throw error;
+
+          // Update the local state with the updated players list
+          players = updatedPlayers;
+
+          // Notify all players about the player leaving
+          // This can be done using your existing real-time subscription setup
+          // For example, you can use a channel to broadcast the player leaving
+          supabase
+              .channel(`player_${roomId}`)
+              .send('player_left', { playerId });
+
+          console.log(`Player ${playerId} has been synced to all players`);
+
+      } catch (err) {
+          console.error('Error syncing player leave:', err);
+      }
   }
 
   async function checkAllPlayersReady() {
@@ -329,6 +521,9 @@
         localStorage.removeItem('roomId');
         localStorage.removeItem('currentRoomCode');
       }
+
+      // Check if the lobby should be deleted
+      await checkAndDeleteLobby(); // Call the new function here
 
     } catch (err) {
       console.error('Error handling player leave:', err);
@@ -1325,7 +1520,7 @@ async function updateGameModeStatus() {
                     <button
                       type="button"
                       class="game-card w-full h-full {$currentGameState.isDrawPhase ? 'active pulse-animation' : ''}"
-                      on:click={() => $currentGameState.isDrawPhase && handleCardReveal()}
+                      on:click={() => $currentGameState.isDrawPhase && handleCardReveal() && handleDrawCard()}
                       disabled={!$currentGameState.isDrawPhase || isLoading}
                     >
                       <div class="card-inner {isCardRevealed ? 'revealed' : ''} w-full h-full">
@@ -1440,10 +1635,18 @@ async function updateGameModeStatus() {
             size="lg"
             class="w-full hover:bg-destructive hover:text-destructive-foreground"
             disabled={isLoading}
-            on:click={() => showLeaveConfirm = true}
+            on:click={() => showLeaveConfirm = true && handlePlayerLeaveDuringGame}
           >
             Leave Game
           </Button>
+          {#if isTurnActive}
+            <div>
+                <p>{currentQuestion}</p>
+                <Button on:click={endTurn}>
+                    End Turn
+                </Button>
+            </div>
+          {/if}
         </Card.Footer>
       </Card.Root>
     {:else}
