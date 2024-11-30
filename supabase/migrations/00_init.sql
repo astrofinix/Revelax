@@ -24,6 +24,9 @@ CREATE TABLE public.game_sessions (
     current_card_index INTEGER DEFAULT 0,
     current_player_index INTEGER DEFAULT 0,
     current_card_revealed BOOLEAN DEFAULT false,
+    current_card_content TEXT,
+    last_active_player_index INTEGER,
+    next_player_index INTEGER,
     is_active BOOLEAN DEFAULT true,
     started_at TIMESTAMPTZ DEFAULT NOW(),
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -132,7 +135,8 @@ BEGIN
     is_active,
     started_at,
     last_update,
-    current_card_revealed
+    current_card_revealed,
+    current_card_content
   )
   VALUES (
     p_room_id,
@@ -144,7 +148,8 @@ BEGIN
     true,
     p_started_at,
     p_started_at,
-    false
+    false,
+    NULL
   )
   RETURNING id INTO v_session_id;
 
