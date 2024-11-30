@@ -1188,29 +1188,8 @@ function setupSubscriptions() {
 
     if (playersError) throw playersError;
 
-    // 2. Update room status and remove game session reference
-    const { error: roomError } = await supabase
-      .from('rooms')
-      .update({
-        status: 'waiting',
-        game_session_id: null,
-        game_mode: roomData.game_mode // Preserve the current game mode
-      })
-      .eq('id', roomId);
-
-    if (roomError) throw roomError;
-
-    // 3. Delete the inactive game session
-    const { error: sessionError } = await supabase
-      .from('game_sessions')
-      .delete()
-      .eq('id', gameSession.id)
-      .eq('room_id', roomId);
-
-    if (sessionError) throw sessionError;
-
-    // 4. Reset all local state
-    gameStarted = false;
+	// 4. Reset all local state
+	gameStarted = false;
     gameSession = null;
     currentCard = null;
     isMyTurn = false;
@@ -1227,11 +1206,32 @@ function setupSubscriptions() {
       currentCardContent: null
     });
 
-    // 6. Force a refresh of the players' status
-    await loadPlayers();
+    // 2. Update room status and remove game session reference
+    const { error: roomError } = await supabase
+      .from('rooms')
+      .update({
+        status: 'waiting',
+        game_session_id: null,
+        game_mode: roomData.game_mode // Preserve the current game mode
+      })
+      .eq('id', roomId);
 
-    // 7. Redirect to lobby
-    goto(`/lobby/${roomId}`);
+	  // 6. Force a refresh of the players' status
+	  await loadPlayers();
+
+	// 7. Redirect to lobby
+	goto(`/lobby`);
+
+    if (roomError) throw roomError;
+
+    // 3. Delete the inactive game session
+    const { error: sessionError } = await supabase
+      .from('game_sessions')
+      .delete()
+      .eq('id', gameSession.id)
+      .eq('room_id', roomId);
+
+    if (sessionError) throw sessionError;
 
     console.log('✅ Game end cleanup completed successfully');
 
@@ -1387,11 +1387,21 @@ async function handleGameEndForAll() {
 															<p class="text-lg text-muted-foreground">Click to Draw Card</p>
 														</div>
 													{:else if !gameSession?.current_card_revealed}
-														<div class="loading-card-state space-y-6">
-															<p class="text-lg text-muted-foreground">
-																Waiting for {players[currentPlayerIndex]?.username} to draw a card...
-															</p>
+													<div class="loading-card-state space-y-6">
+														<div class="loading-animation">
+														  <div class="card-stack">
+															{#each Array(3) as _, i}
+															  <div 
+																class="stacked-card" 
+																style="--delay: {i * 150}ms; --offset: {i * 4}px"
+															  />
+															{/each}
+														  </div>
 														</div>
+														<p class="text-lg text-muted-foreground animate-pulse">
+														  Waiting for {players[currentPlayerIndex]?.username}'s move...
+														</p>
+													  </div>
 													{/if}
 												</div>
 											</div>
