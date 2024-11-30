@@ -16,6 +16,8 @@
   let showTerms = false;
   let isFirstVisit = true;
 
+  let click1;
+
   onMount(() => {
     // Always use dark mode
     document.documentElement.classList.add('dark');
@@ -30,6 +32,11 @@
       showTerms = true;
       isFirstVisit = true;
     }
+
+    // if (typeof window !== 'undefined') {
+      click1 = new Audio('/sounds/select1.wav');
+      // flip = new Audio('/sounds/paper.mp3')
+    // }
   });
 
   function handleTermsAccept() {
@@ -45,6 +52,12 @@
     }
     localStorage.setItem('roomAction', action);
     goto('/username');
+  }
+
+  function playClick1() {
+    if (click1) {
+      click1.play();
+    }
   }
 </script>
 
@@ -126,7 +139,7 @@
             I agree to follow the
             <button 
               class="text-primary hover:underline focus:outline-none"
-              on:click={() => showTerms = true}
+              on:click={() => { playClick1(); showTerms = true;}}
               type="button"
             >
               community guidelines
@@ -142,7 +155,7 @@
           class="sans-font font-[600] w-full text-lg py-6 bg-primary text-primary-foreground
                  hover:bg-primary/90 disabled:opacity-50
                  animate__animated animate__fadeInUp animate__delay-1s animate__fast"
-          on:click={() => handleRoomAction('create')}
+          on:click={() => { playClick1(); handleRoomAction('create'); }}
           disabled={!termsAccepted}
         >
           Create Room
@@ -156,7 +169,7 @@
           class="w-full text-lg py-6 bg-secondary text-secondary-foreground
                  hover:bg-secondary/80 disabled:opacity-50
                  animate__animated animate__fadeInDown animate__delay-1s animate__fast"
-          on:click={() => handleRoomAction('join')}
+          on:click={() => { playClick1(); handleRoomAction('join'); }}
           disabled={!termsAccepted}
         >
           Join Room

@@ -49,6 +49,7 @@
 		isDrawPhase: false
 	});
 
+	
 	onMount(async () => {
 		console.log('Component mounted');
 		if (!browser) return;
