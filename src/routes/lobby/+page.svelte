@@ -614,7 +614,7 @@ function setupSubscriptions() {
 				.from('game_sessions')
 				.select('*')
 				.eq('room_id', roomId)
-				.eq('is_active', true)
+				.eq('activity_status', 'active')
 				.single();
 
 			if (error) {
@@ -644,7 +644,7 @@ function setupSubscriptions() {
 				.from('game_sessions')
 				.select('*')
 				.eq('room_id', roomId)
-				.eq('is_active', true)
+				.eq('activity_status', 'active')
 				.single();
 
 			if (existingSession) {
@@ -1028,7 +1028,7 @@ function setupSubscriptions() {
     const { error: sessionUpdateError } = await supabase
       .from('game_sessions')
       .update({ 
-        is_active: false,
+        activity_status: 'ending',
         last_update: new Date().toISOString()
       })
       .eq('id', gameSession.id)
@@ -1037,7 +1037,7 @@ function setupSubscriptions() {
     if (sessionUpdateError) throw sessionUpdateError;
 
     // The subscription will handle the rest of the cleanup
-    console.log('✅ Game session marked as inactive');
+    console.log('✅ Game session marked as ending...');
 
   } catch (err) {
     console.error('💥 Error ending game:', err);
@@ -1126,18 +1126,12 @@ function setupSubscriptions() {
 
 	async function updateGameSession() {
 		try {
-			 // 1. First check if session is still active
-			 const { data: sessionStatus, error: statusError } = await supabase
-			.from('game_sessions')
-			.select('is_active')
-			.eq('id', gameSession.id)
-			.single();
-
-			// If session doesn't exist or is inactive, cleanup and return
-			if (sessionStatus.is_active === false) {
-				handleGameEndCleanup();
-				return;
-			}
+			// 1. First check if session is still active and game status
+			const { data: sessionStatus, error: statusError } = await supabase
+				.from('game_sessions')
+				.select('activity_status, started_at')
+				.eq('id', gameSession.id)
+				.single();
 
 			// Get current game session state
 			const { data: currentSession, error: sessionError } = await supabase
@@ -1154,7 +1148,19 @@ function setupSubscriptions() {
 			currentPlayerIndex = currentSession.current_player_index;
 			isMyTurn = currentSession.player_sequence[currentSession.current_player_index] === userId;
 			isCardRevealed = currentSession.current_card_revealed;
-
+						// Only trigger cleanup if:
+			// 1. Session exists
+			// 2. Session is inactive
+			// 3. Game has already started (gameStarted is true)
+			// 4. It's been more than a few seconds since session started (to avoid cleanup during game initialization)
+			if (sessionStatus && 
+				sessionStatus.activity_status === 'ending' && 
+				gameStarted && 
+				sessionStatus.started_at && 
+				(new Date() - new Date(sessionStatus.started_at)) > 10000) {
+				handleGameEndCleanup();
+				return;
+			}
 			// Always update card content when it exists
 			if (currentSession.current_card_content) {
 				currentCard = {
@@ -1212,7 +1218,7 @@ function setupSubscriptions() {
         isDrawPhase: false,
         currentCardContent: null
       });
-
+	  
       // Redirect to lobby
       goto(`/lobby`);
       return;
@@ -1278,7 +1284,6 @@ function setupSubscriptions() {
 
   } catch (err) {
     console.error('💥 Error in game end cleanup:', err);
-    error = 'Failed to complete game end cleanup. Please refresh the page.';
   }
 }
 	// Add new function to handle game end for all players
@@ -1308,7 +1313,7 @@ async function handleGameEndForAll() {
     
     // Navigate back to lobby
     console.log('🔄 Redirecting to lobby...');
-    goto(`/lobby/${roomId}`);
+    goto(`/lobby`);
 
   } catch (err) {
     console.error('💥 Error in handleGameEndForAll:', err);
