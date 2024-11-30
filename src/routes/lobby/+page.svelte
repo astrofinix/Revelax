@@ -469,43 +469,43 @@
 			console.error('💥 Error updating game mode status:', err);
 		}
 	}
-	// Update setupSubscriptions function for better real-time updates
-	function setupSubscriptions() {
-		
-		const gameSessionSubscription = supabase
-			.channel(`game_sessions:${gameSession?.id}`)
-			.on('postgres_changes', 
-				{ 
-					event: 'UPDATE', 
-					schema: 'public', 
-					table: 'game_sessions',
-					filter: `id=eq.${gameSession?.id}`
-				}, 
-				async (payload) => {
-					// Handle game end when session becomes inactive
-					if (payload.new && !payload.new.is_active) {
-						console.log('🏁 Game session became inactive, cleaning up...');
-						await handleGameEndCleanup();
-						return;
-					}
+	// Update the subscription handler to include game end cleanup
+function setupSubscriptions() {
+  
+  const gameSessionSubscription = supabase
+    .channel(`game_sessions:${gameSession?.id}`)
+    .on('postgres_changes', 
+      { 
+        event: 'UPDATE', 
+        schema: 'public', 
+        table: 'game_sessions',
+        filter: `id=eq.${gameSession?.id}`
+      }, 
+      async (payload) => {
+        // Handle game end when session becomes inactive
+        if (payload.new && !payload.new.is_active) {
+          console.log('🏁 Game session became inactive, cleaning up...');
+          await handleGameEndCleanup();
+          return;
+        }
 
-					// Handle other updates as before
-					const hasChanges = 
-						payload.new.current_card_revealed !== gameSession?.current_card_revealed ||
-						payload.new.current_card_content !== gameSession?.current_card_content ||
-						payload.new.current_player_index !== gameSession?.current_player_index ||
-						payload.new.current_card_index !== gameSession?.current_card_index;
+        // Handle other updates as before
+        const hasChanges = 
+          payload.new.current_card_revealed !== gameSession?.current_card_revealed ||
+          payload.new.current_card_content !== gameSession?.current_card_content ||
+          payload.new.current_player_index !== gameSession?.current_player_index ||
+          payload.new.current_card_index !== gameSession?.current_card_index;
 
-					if (hasChanges) {
-						await updateGameSession();
-					}
-				})
-			.subscribe();
+        if (hasChanges) {
+          await updateGameSession();
+        }
+      })
+    .subscribe();
 
-		return () => {
-			supabase.removeChannel(gameSessionSubscription);
-		};
-	}
+  return () => {
+    supabase.removeChannel(gameSessionSubscription);
+  };
+}
 
 	// Add new handler for player state changes
 	async function handlePlayerStateChange(payload) {
@@ -1027,32 +1027,32 @@
 	}
 
 	async function handleGameEnd() {
-		console.log('🏁 Initiating game end...');
-		isLoading = true;
+  console.log('🏁 Initiating game end...');
+  isLoading = true;
 
-		try {
-			// 1. First, set game session to inactive
-			const { error: sessionUpdateError } = await supabase
-				.from('game_sessions')
-				.update({ 
-					is_active: false,
-					last_update: new Date().toISOString()
-				})
-				.eq('id', gameSession.id)
-				.eq('room_id', roomId);
+  try {
+    // 1. First, set game session to inactive
+    const { error: sessionUpdateError } = await supabase
+      .from('game_sessions')
+      .update({ 
+        is_active: false,
+        last_update: new Date().toISOString()
+      })
+      .eq('id', gameSession.id)
+      .eq('room_id', roomId);
 
-			if (sessionUpdateError) throw sessionUpdateError;
+    if (sessionUpdateError) throw sessionUpdateError;
 
-			// The subscription will handle the rest of the cleanup
-			console.log('✅ Game session marked as inactive');
+    // The subscription will handle the rest of the cleanup
+    console.log('✅ Game session marked as inactive');
 
-		} catch (err) {
-			console.error('💥 Error ending game:', err);
-			error = 'Failed to end game. Please try again.';
-		} finally {
-			isLoading = false;
-		}
-	}
+  } catch (err) {
+    console.error('💥 Error ending game:', err);
+    error = 'Failed to end game. Please try again.';
+  } finally {
+    isLoading = false;
+  }
+}
 
 	async function handleEndTurn() {
 		if (!isMyTurn || !isCardRevealed || isLoading) return;
@@ -1175,107 +1175,105 @@
 		updateGameSession();
 	}
 
-	// New function to handle cleanup operations
 	async function handleGameEndCleanup() {
-		try {
-			// 1. Reset all players' ready status
-			const { error: playersError } = await supabase
-				.from('players')
-				.update({ 
-					is_ready: false,
-					last_updated: new Date().toISOString()
-				})
-				.eq('room_id', roomId);
+  try {
+    // 1. Reset all players' ready status
+    const { error: playersError } = await supabase
+      .from('players')
+      .update({ 
+        is_ready: false,
+        last_updated: new Date().toISOString()
+      })
+      .eq('room_id', roomId);
 
-			if (playersError) throw playersError;
+    if (playersError) throw playersError;
 
-			// 2. Update room status and remove game session reference
-			const { error: roomError } = await supabase
-				.from('rooms')
-				.update({
-					status: 'waiting',
-					game_session_id: null,
-					game_mode: roomData.game_mode // Preserve the current game mode
-				})
-				.eq('id', roomId);
+    // 2. Update room status and remove game session reference
+    const { error: roomError } = await supabase
+      .from('rooms')
+      .update({
+        status: 'waiting',
+        game_session_id: null,
+        game_mode: roomData.game_mode // Preserve the current game mode
+      })
+      .eq('id', roomId);
 
-			if (roomError) throw roomError;
+    if (roomError) throw roomError;
 
-			// 3. Delete the inactive game session
-			const { error: sessionError } = await supabase
-				.from('game_sessions')
-				.delete()
-				.eq('id', gameSession.id)
-				.eq('room_id', roomId);
+    // 3. Delete the inactive game session
+    const { error: sessionError } = await supabase
+      .from('game_sessions')
+      .delete()
+      .eq('id', gameSession.id)
+      .eq('room_id', roomId);
 
-			if (sessionError) throw sessionError;
+    if (sessionError) throw sessionError;
 
-			// 4. Reset all local state
-			gameStarted = false;
-			gameSession = null;
-			currentCard = null;
-			isMyTurn = false;
-			isCardRevealed = false;
-			currentPlayerIndex = 0;
-			isReady = false;
+    // 4. Reset all local state
+    gameStarted = false;
+    gameSession = null;
+    currentCard = null;
+    isMyTurn = false;
+    isCardRevealed = false;
+    currentPlayerIndex = 0;
+    isReady = false;
 
-			// 5. Reset game state store
-			currentGameState.set({
-				deckName: '',
-				currentCardIndex: 0,
-				totalCards: 0,
-				isDrawPhase: false,
-				currentCardContent: null
-			});
+    // 5. Reset game state store
+    currentGameState.set({
+      deckName: '',
+      currentCardIndex: 0,
+      totalCards: 0,
+      isDrawPhase: false,
+      currentCardContent: null
+    });
 
-			// 6. Force a refresh of the players' status
-			await loadPlayers();
+    // 6. Force a refresh of the players' status
+    await loadPlayers();
 
-			// 7. Redirect to lobby
-			goto(`/lobby/${roomId}`);
+    // 7. Redirect to lobby
+    goto(`/lobby/${roomId}`);
 
-			console.log('✅ Game end cleanup completed successfully');
+    console.log('✅ Game end cleanup completed successfully');
 
-		} catch (err) {
-			console.error('💥 Error in game end cleanup:', err);
-			error = 'Failed to complete game end cleanup. Please refresh the page.';
-		}
-	}
-
+  } catch (err) {
+    console.error('💥 Error in game end cleanup:', err);
+    error = 'Failed to complete game end cleanup. Please refresh the page.';
+  }
+}
 	// Add new function to handle game end for all players
-	async function handleGameEndForAll() {
-		console.log('🏁 Handling game end for all players...');
-		try {
-			// Reset local state
-			gameStarted = false;
-			gameSession = null;
-			currentCard = null;
-			isMyTurn = false;
-			isCardRevealed = false;
-			currentPlayerIndex = 0;
-			isReady = false;
+async function handleGameEndForAll() {
+  console.log('🏁 Handling game end for all players...');
+  try {
+    // Reset local state
+    gameStarted = false;
+    gameSession = null;
+    currentCard = null;
+    isMyTurn = false;
+    isCardRevealed = false;
+    currentPlayerIndex = 0;
+    isReady = false;
 
-			// Reset game state store
-			currentGameState.set({
-				deckName: '',
-				currentCardIndex: 0,
-				totalCards: 0,
-				isDrawPhase: false,
-				currentCardContent: null
-			});
+    // Reset game state store
+    currentGameState.set({
+      deckName: '',
+      currentCardIndex: 0,
+      totalCards: 0,
+      isDrawPhase: false,
+      currentCardContent: null
+    });
 
-			// Force a refresh of the players' status
-			await loadPlayers();
-			
-			// Navigate back to lobby
-			console.log('🔄 Redirecting to lobby...');
-			goto(`/lobby/${roomId}`);
+    // Force a refresh of the players' status
+    await loadPlayers();
+    
+    // Navigate back to lobby
+    console.log('🔄 Redirecting to lobby...');
+    goto(`/lobby/${roomId}`);
 
-		} catch (err) {
-			console.error('💥 Error in handleGameEndForAll:', err);
-			error = 'Failed to end game properly. Please refresh the page.';
-		}
-	}
+  } catch (err) {
+    console.error('💥 Error in handleGameEndForAll:', err);
+    error = 'Failed to end game properly. Please refresh the page.';
+  }
+}
 </script>
 
 <!-- Content -->
