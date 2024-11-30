@@ -27,7 +27,7 @@ CREATE TABLE public.game_sessions (
     current_card_content TEXT,
     last_active_player_index INTEGER,
     next_player_index INTEGER,
-    is_active BOOLEAN DEFAULT true,
+    activity_status TEXT DEFAULT 'active',
     started_at TIMESTAMPTZ DEFAULT NOW(),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     last_update TIMESTAMPTZ DEFAULT NOW()
@@ -35,7 +35,7 @@ CREATE TABLE public.game_sessions (
 -- Add partial index to ensure only one active session per room
 CREATE UNIQUE INDEX idx_unique_active_session_per_room 
 ON public.game_sessions (room_id) 
-WHERE is_active = true;
+WHERE activity_status = 'active';
 
 -- Add foreign key reference back to game_sessions
 ALTER TABLE public.rooms 
@@ -98,10 +98,10 @@ CREATE OR REPLACE FUNCTION deactivate_game_sessions(p_room_id uuid, p_timestamp 
 RETURNS void AS $$
 BEGIN
   UPDATE game_sessions
-  SET is_active = false,
+  SET activity_status = 'inactive',
       last_update = p_timestamp
   WHERE room_id = p_room_id
-    AND is_active = true;
+    AND activity_status = 'active';
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -116,13 +116,25 @@ RETURNS json AS $$
 DECLARE
   v_session_id uuid;
   v_result json;
+  v_existing_session game_sessions%ROWTYPE;
 BEGIN
-  -- Deactivate any existing sessions first
-  UPDATE game_sessions
-  SET is_active = false,
-      last_update = p_started_at
+  -- Check for existing active session
+  SELECT * INTO v_existing_session
+  FROM game_sessions
   WHERE room_id = p_room_id
-    AND is_active = true;
+    AND activity_status = 'active';
+
+  -- If active session exists, return it
+  IF FOUND THEN
+    SELECT row_to_json(v_existing_session.*) INTO v_result;
+    RETURN v_result;
+  END IF;
+
+  -- Set any existing sessions for this room to inactive
+  UPDATE game_sessions
+  SET activity_status = 'inactive',
+      last_update = p_started_at
+  WHERE room_id = p_room_id;
 
   -- Create new session
   INSERT INTO game_sessions (
@@ -132,7 +144,7 @@ BEGIN
     current_card_index,
     player_sequence,
     current_player_index,
-    is_active,
+    activity_status,
     started_at,
     last_update,
     current_card_revealed,
@@ -145,7 +157,7 @@ BEGIN
     0,
     p_player_sequence,
     0,
-    true,
+    'active',
     p_started_at,
     p_started_at,
     false,
