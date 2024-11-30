@@ -354,6 +354,7 @@
 				localStorage.removeItem('roomId');
 				localStorage.removeItem('currentRoomCode');
 			}
+
 		} catch (err) {
 			console.error('Error handling player leave:', err);
 		}
@@ -966,6 +967,7 @@ function setupSubscriptions() {
 		isLoading = true;
 
 		try {
+			playSound("flip");
 			const currentCardIndex = gameSession.current_card_index;
 			const cardIndexInSequence = gameSession.card_sequence[currentCardIndex];
 
@@ -1568,7 +1570,7 @@ async function handleGameEndForAll() {
 										<Button
 											variant="default"
 											class="w-full max-w-xs"
-											on:click={handleEndTurn}
+											on:click={() => { handleEndTurn(); playSound("snap"); }}
 											disabled={isLoading}
 										>
 											{#if isLoading}
@@ -1628,7 +1630,7 @@ async function handleGameEndForAll() {
 						size="lg"
 						class="w-full hover:bg-destructive hover:text-destructive-foreground"
 						disabled={isLoading}
-						on:click={() => (showLeaveConfirm = true)}
+						on:click={() => { showLeaveConfirm = true; playSound("error"); }}
 					>
 						Leave Game
 					</Button>
