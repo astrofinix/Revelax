@@ -115,6 +115,13 @@
 		}
 	});
 
+	// Reactive statement to detect "Starting Game..." condition
+	$: isStartingGame = isReady && players.every((p) => p.is_ready);
+
+	$: if (isStartingGame) {
+		playSound('affirm');
+	}
+
 	function playSound(soundName) {
     // Check if the soundName exists in the soundFiles object
     const soundPath = soundFiles[soundName];
