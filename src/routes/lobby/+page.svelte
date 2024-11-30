@@ -859,7 +859,7 @@ function setupSubscriptions() {
 			return true;
 		} catch (err) {
 			console.error('💥 Error in handleGameStart:', err);
-			error = 'Failed to start game. Please try again.';
+			// error = 'Failed to start game. Please try again.';
 			return false;
 		}
 	}
@@ -1290,7 +1290,7 @@ function setupSubscriptions() {
 
       // Reset game state store
       currentGameState.set({
-        deckName: '',
+        deckName: roomData?.game_mode || '',
         currentCardIndex: 0,
         totalCards: 0,
         isDrawPhase: false,
@@ -1345,7 +1345,7 @@ function setupSubscriptions() {
 
     // Reset game state store
     currentGameState.set({
-      deckName: '',
+	  deckName: roomData?.game_mode || '',
       currentCardIndex: 0,
       totalCards: 0,
       isDrawPhase: false,
@@ -1362,40 +1362,6 @@ function setupSubscriptions() {
 
   } catch (err) {
     console.error('💥 Error in game end cleanup:', err);
-  }
-}
-	// Add new function to handle game end for all players
-async function handleGameEndForAll() {
-  console.log('🏁 Handling game end for all players...');
-  try {
-    // Reset local state
-    gameStarted = false;
-    gameSession = null;
-    currentCard = null;
-    isMyTurn = false;
-    isCardRevealed = false;
-    currentPlayerIndex = 0;
-    isReady = false;
-
-    // Reset game state store
-    currentGameState.set({
-      deckName: '',
-      currentCardIndex: 0,
-      totalCards: 0,
-      isDrawPhase: false,
-      currentCardContent: null
-    });
-
-    // Force a refresh of the players' status
-    await loadPlayers();
-    
-    // Navigate back to lobby
-    console.log('�� Redirecting to lobby...');
-    goto(`/lobby`);
-
-  } catch (err) {
-    console.error('💥 Error in handleGameEndForAll:', err);
-    error = 'Failed to end game properly. Please refresh the page.';
   }
 }
 </script>
