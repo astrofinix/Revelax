@@ -16,7 +16,15 @@
   let showTerms = false;
   let isFirstVisit = true;
 
-  let click1;
+  let sound;
+
+  const soundFiles = {
+    'snap': '/sounds/select1.wav',
+    'click': '/sounds/select2.wav',
+    'flip': '/sounds/paper.mp3',
+    'wind': '/sounds/wind.mp3',
+    'pop': '/sounds/pop.wav'
+  };
 
   onMount(() => {
     // Always use dark mode
@@ -33,13 +41,13 @@
       isFirstVisit = true;
     }
 
-    // if (typeof window !== 'undefined') {
-      click1 = new Audio('/sounds/select1.wav');
-      // flip = new Audio('/sounds/paper.mp3')
-    // }
+    if (typeof window !== 'undefined') {
+      sound = new Audio();
+    }
   });
 
   function handleTermsAccept() {
+    playSound("snap");
     termsAccepted = true;
     showTerms = false;
     localStorage.setItem('termsAccepted', 'true');
@@ -54,9 +62,24 @@
     goto('/username');
   }
 
-  function playClick1() {
-    if (click1) {
-      click1.play();
+  function playSound(soundName) {
+    // Check if the soundName exists in the soundFiles object
+    const soundPath = soundFiles[soundName];
+
+    if (soundPath && sound) {
+      // If the audio is already playing, stop it and reset to the beginning
+      if (!sound.paused) {
+        sound.pause();
+        sound.currentTime = 0; // Reset audio to the start
+      }
+
+      // Set the new sound source and play
+      sound.src = soundPath;
+      sound.play().catch((error) => {
+        console.error('Error playing sound: ', error);
+      });
+    } else {
+      console.error('Sound not found or Audio not initialized: ' + soundName);
     }
   }
 </script>
@@ -126,6 +149,7 @@
           <Checkbox 
             id="terms" 
             bind:checked={termsAccepted}
+            on:click = {() => playSound("pop")}
             on:change={(e) => {
               if (!e.target.checked) {
                 showTerms = true;
@@ -139,7 +163,7 @@
             I agree to follow the
             <button 
               class="text-primary hover:underline focus:outline-none"
-              on:click={() => { playClick1(); showTerms = true;}}
+              on:click={() => { playSound("flip"); showTerms = true;}}
               type="button"
             >
               community guidelines
@@ -155,7 +179,7 @@
           class="sans-font font-[600] w-full text-lg py-6 bg-primary text-primary-foreground
                  hover:bg-primary/90 disabled:opacity-50
                  animate__animated animate__fadeInUp animate__delay-1s animate__fast"
-          on:click={() => { playClick1(); handleRoomAction('create'); }}
+          on:click={() => { playSound("snap"); handleRoomAction('create'); }}
           disabled={!termsAccepted}
         >
           Create Room
@@ -169,7 +193,7 @@
           class="w-full text-lg py-6 bg-secondary text-secondary-foreground
                  hover:bg-secondary/80 disabled:opacity-50
                  animate__animated animate__fadeInDown animate__delay-1s animate__fast"
-          on:click={() => { playClick1(); handleRoomAction('join'); }}
+          on:click={() => { playSound("snap"); handleRoomAction('join'); }}
           disabled={!termsAccepted}
         >
           Join Room
@@ -242,7 +266,7 @@
           {#if !isFirstVisit}
             <Button 
               variant="outline"
-              on:click={() => showTerms = false}
+              on:click={() =>{ playSound("snap"); showTerms = false; }}
             >
               Maybe Later
             </Button>
