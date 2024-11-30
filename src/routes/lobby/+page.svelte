@@ -14,6 +14,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Users, Crown } from 'lucide-svelte';
 	import { gameModes } from '$lib/config/gameModes.ts';
+	import { pulseFX } from '$lib/pulse';
 	import { Label } from '$lib/components/ui/label';
 	import { slide } from 'svelte/transition';
 	import { writable, derived } from 'svelte/store';
@@ -48,6 +49,7 @@
 		isDrawPhase: false
 	});
 
+	
 	onMount(async () => {
 		console.log('Component mounted');
 		if (!browser) return;
@@ -1461,18 +1463,23 @@ async function handleGameEndForAll() {
 											<!-- Base card -->
 											<div class="card-base absolute inset-0">
 												<div
-													class="flex h-full flex-col items-center justify-center p-8 text-center"
+													class="flex h-full flex-col items-center justify-center p-8 text-center space-y-4"
 												>
 													{#if $currentGameState.isDrawPhase}
-														<div class="animate-pulse space-y-4">
-															<p class="text-2xl font-semibold text-primary">Your Turn!</p>
-															<p class="text-lg text-muted-foreground">Click to Draw Card</p>
+														<div class="text text-2xl font-semibold text-primary">
+															<span class="text-bottom">Your Turn!</span>
+															<span class="text-top">Your Turn!</span>
+														</div>
+														<div class="text text-lg text-muted-foreground">
+															<span class="text-bottom">Click to Draw Card</span>
+															<span class="text-top">Click to Draw Card</span>
 														</div>
 													{:else if !gameSession?.current_card_revealed}
 													<div class="loading-card-state space-y-6">
 														<div class="loading-animation">
 														  <div class="card-stack">
 															{#each Array(3) as _, i}
+															  <!-- svelte-ignore element_invalid_self_closing_tag -->
 															  <div 
 																class="stacked-card" 
 																style="--delay: {i * 150}ms; --offset: {i * 4}px"
@@ -1480,9 +1487,12 @@ async function handleGameEndForAll() {
 															{/each}
 														  </div>
 														</div>
-														<p class="text-lg text-muted-foreground animate-pulse">
-														  Waiting for {players[currentPlayerIndex]?.username}'s move...
-														</p>
+														<div class="text text-lg text-muted-foreground">
+															<span class="text-bottom">
+																Waiting for {players[currentPlayerIndex]?.username}'s move...</span>
+															<span class="text-top">
+																Waiting for {players[currentPlayerIndex]?.username}'s move...</span>
+														</div>
 													  </div>
 													{/if}
 												</div>
@@ -1492,6 +1502,7 @@ async function handleGameEndForAll() {
 											{#if gameSession?.current_card_revealed}
 												<div
 													class="question-card absolute inset-0 transform transition-all duration-300"
+													
 													class:active={gameSession?.current_card_revealed}
 												>
 													<div
@@ -1823,237 +1834,4 @@ async function handleGameEndForAll() {
 </Dialog.Root>
 
 <style>
-	.pulse-animation {
-		animation: pulse 2s infinite;
-	}
-	@keyframes pulse {
-		0% {
-			transform: scale(1);
-			box-shadow: 0 0 0 0 rgba(var(--primary) / 0.7);
-		}
-
-		70% {
-			transform: scale(1.05);
-			box-shadow: 0 0 0 10px rgba(var(--primary) / 0);
-		}
-
-		100% {
-			transform: scale(1);
-			box-shadow: 0 0 0 0 rgba(var(--primary) / 0);
-		}
-	}
-	:global(body) {
-		margin: 0;
-		padding: 0;
-		overflow-x: hidden;
-		background-color: hsl(var(--background));
-		color: hsl(var(--foreground));
-	}
-
-	:global(.card) {
-		background-color: hsl(var(--card));
-		color: hsl(var(--card-foreground));
-		border: 1px solid hsl(var(--border));
-		animation: fadeIn 0.5s ease-out;
-	}
-
-	/* Scrollbar styles */
-	div::-webkit-scrollbar {
-		width: 6px;
-	}
-
-	div::-webkit-scrollbar-track {
-		background: transparent;
-	}
-
-	div::-webkit-scrollbar-thumb {
-		background-color: hsl(var(--primary) / 0.2);
-		border-radius: 20px;
-	}
-
-	@keyframes fadeIn {
-		from {
-			opacity: 0;
-			transform: translateY(20px);
-		}
-		to {
-			opacity: 1;
-			transform: translateY(0);
-		}
-	}
-
-	svg {
-		height: 100%;
-		width: 100%;
-		mix-blend-mode: screen;
-		opacity: 0.7;
-	}
-
-	.card-container {
-		width: 100%;
-		padding: 1rem;
-	}
-
-	.game-card {
-		@apply rounded-xl bg-card transition-all duration-300 ease-out;
-		border: 1px solid hsl(var(--border));
-		min-height: 400px;
-		perspective: 1000px;
-	}
-
-	.game-card:not(:disabled).active {
-		@apply cursor-pointer hover:border-primary/50;
-	}
-
-	.game-card:not(:disabled).active:hover {
-		transform: translateY(-4px);
-		box-shadow:
-			0 20px 25px -5px rgb(0 0 0 / 0.1),
-			0 8px 10px -6px rgb(0 0 0 / 0.1);
-	}
-
-	.card-inner {
-		position: relative;
-		transform-style: preserve-3d;
-		transition: transform 0.6s cubic-bezier(0.23, 1, 0.32, 1);
-	}
-
-	.card-inner.revealed {
-		transform: rotateY(180deg);
-	}
-
-	.card-face {
-		position: absolute;
-		width: 100%;
-		height: 100%;
-		backface-visibility: hidden;
-		@apply overflow-hidden rounded-xl;
-	}
-
-	.card-back {
-		transform: rotateY(180deg);
-	}
-
-	.card-content-wrapper {
-		@apply rounded-lg bg-card/50 p-6 backdrop-blur-sm;
-		border: 1px solid hsl(var(--border));
-	}
-
-	.loading-card-state {
-		@apply flex flex-col items-center justify-center;
-	}
-
-	.loading-animation {
-		@apply relative mb-4 h-32 w-24;
-	}
-
-	.card-stack {
-		@apply relative h-full w-full;
-		perspective: 1000px;
-	}
-
-	.stacked-card {
-		@apply absolute inset-0 rounded-xl border border-primary/20;
-		background: linear-gradient(135deg, hsl(var(--primary) / 0.1), hsl(var(--primary) / 0.05));
-		animation: float 2s ease-in-out infinite;
-		animation-delay: var(--delay);
-		transform: translateY(var(--offset)) scale(0.95);
-		box-shadow:
-			0 4px 6px -1px rgb(0 0 0 / 0.1),
-			0 2px 4px -2px rgb(0 0 0 / 0.1);
-	}
-
-	@keyframes float {
-		0%,
-		100% {
-			transform: translateY(var(--offset)) scale(0.95);
-		}
-		50% {
-			transform: translateY(calc(var(--offset) - 8px)) scale(0.95);
-		}
-	}
-
-	.game-card {
-		@apply rounded-xl bg-card transition-all duration-300 ease-out;
-		border: 1px solid hsl(var(--border));
-		min-height: 400px;
-		perspective: 1000px;
-	}
-
-	.game-card:not(:disabled).active {
-		@apply cursor-pointer;
-		animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-	}
-
-	@keyframes pulse {
-		0%,
-		100% {
-			box-shadow: 0 0 0 0 hsl(var(--primary) / 0.3);
-		}
-		50% {
-			box-shadow: 0 0 0 8px hsl(var(--primary) / 0);
-		}
-	}
-
-	.card-inner {
-		position: relative;
-		transform-style: preserve-3d;
-		transition: transform 0.6s cubic-bezier(0.23, 1, 0.32, 1);
-	}
-
-	.card-face {
-		backface-visibility: hidden;
-		@apply overflow-hidden rounded-xl;
-	}
-
-	.card-base {
-		@apply rounded-xl bg-card transition-all duration-300 ease-out;
-		border: 1px solid hsl(var(--border));
-		transform: translateY(0);
-	}
-
-	.question-card {
-		@apply rounded-xl bg-card transition-all duration-500 ease-out;
-		border: 1px solid hsl(var(--primary/50));
-		opacity: 0;
-		transform: translateY(-20px) scale(0.95);
-	}
-
-	.question-card.active {
-		opacity: 1;
-		transform: translateY(0) scale(1);
-		box-shadow:
-			0 10px 25px -5px rgb(0 0 0 / 0.2),
-			0 8px 10px -6px rgb(0 0 0 / 0.1);
-	}
-
-	/* Remove old flip animation styles */
-	.card-inner,
-	.card-face,
-	.front,
-	.back {
-		display: none;
-	}
-
-	.game-card {
-		@apply rounded-xl bg-transparent transition-all duration-300 ease-out;
-		min-height: 400px;
-	}
-
-	.game-card:not(:disabled).active {
-		@apply cursor-pointer;
-		animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-	}
-
-	/* Add transition for the end turn button */
-	Button {
-		transition: all 0.3s ease-out;
-	}
-
-	Button:hover:not(:disabled) {
-		transform: translateY(-2px);
-		box-shadow:
-			0 4px 6px -1px rgb(0 0 0 / 0.1),
-			0 2px 4px -2px rgb(0 0 0 / 0.1);
-	}
 </style>
