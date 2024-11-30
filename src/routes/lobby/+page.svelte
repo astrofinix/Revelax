@@ -1267,103 +1267,98 @@ function setupSubscriptions() {
 	}
 
 	async function handleGameEndCleanup() {
-  try {
-    // First, check if cleanup has already been performed
-    const { data: currentRoom } = await supabase
-      .from('rooms')
-      .select('status, game_session_id')
-      .eq('id', roomId)
-      .single();
+		// Add a flag to prevent multiple executions
+		if (handleGameEndCleanup.isExecuting) {
+			console.log('Cleanup already in progress, skipping...');
+			return;
+		}
+		
+		handleGameEndCleanup.isExecuting = true;
 
-    // If room is already in 'waiting' state and has no game session, cleanup was already done
-    if (currentRoom.status === 'waiting' && !currentRoom.game_session_id) {
-      console.log('✨ Cleanup already performed, skipping database operations');
-      
-      // Still reset local state
-      gameStarted = false;
-      gameSession = null;
-      currentCard = null;
-      isMyTurn = false;
-      isCardRevealed = false;
-      currentPlayerIndex = 0;
-      isReady = false;
+		try {
+			// First, check if cleanup has already been performed
+			const { data: currentRoom } = await supabase
+				.from('rooms')
+				.select('status, game_session_id, game_mode, admin_id')
+				.eq('id', roomId)
+				.single();
 
-      // Reset game state store
-      currentGameState.set({
-        deckName: roomData?.game_mode || '',
-        currentCardIndex: 0,
-        totalCards: 0,
-        isDrawPhase: false,
-        currentCardContent: null
-      });
-	  
-      // Redirect to lobby
-      goto(`/lobby`);
-      return;
-    }
+			if (!currentRoom) {
+				console.log('Room already deleted, redirecting to home...');
+				goto('/');
+				return;
+			}
 
-    // If cleanup hasn't been performed, do it now
-    const { error: playersError } = await supabase
-      .from('players')
-      .update({ 
-        is_ready: false,
-        last_updated: new Date().toISOString()
-      })
-      .eq('room_id', roomId);
+			// Reset local state first
+			gameStarted = false;
+			gameSession = null;
+			currentCard = null;
+			isMyTurn = false;
+			isCardRevealed = false;
+			currentPlayerIndex = 0;
+			isReady = false;
 
-    if (playersError) throw playersError;
+			// Reset game state store
+			currentGameState.set({
+				deckName: currentRoom.game_mode,
+				currentCardIndex: 0,
+				totalCards: 0,
+				isDrawPhase: false,
+				currentCardContent: null
+			});
 
-    // Update room status and remove game session reference
-    const { error: roomError } = await supabase
-      .from('rooms')
-      .update({
-        status: 'waiting',
-        game_session_id: null,
-        game_mode: roomData.game_mode // Preserve the current game mode
-      })
-      .eq('id', roomId);
+			// Redirect all players to home immediately
+			goto('/');
 
-    if (roomError) throw roomError;
+			// After redirect, perform cleanup operations
+			if (userId === currentRoom.admin_id) {
+				console.log('🧹 Admin performing cleanup operations...');
+				
+				// Clean up in sequence
+				try {
+					// 1. Reset players' ready status
+					const { error: playersError } = await supabase
+						.from('players')
+						.update({ 
+							is_ready: false,
+							last_updated: new Date().toISOString()
+						})
+						.eq('room_id', roomId);
 
-    // Delete the inactive game session
-    const { error: sessionError } = await supabase
-      .from('game_sessions')
-      .delete()
-      .eq('id', gameSession.id)
-      .eq('room_id', roomId);
+					if (playersError) console.error('Error resetting players:', playersError);
 
-    if (sessionError) throw sessionError;
+					// 2. Delete game session if it exists
+					if (currentRoom.game_session_id) {
+						const { error: sessionError } = await supabase
+							.from('game_sessions')
+							.delete()
+							.eq('id', currentRoom.game_session_id);
 
-    // Reset all local state
-    gameStarted = false;
-    gameSession = null;
-    currentCard = null;
-    isMyTurn = false;
-    isCardRevealed = false;
-    currentPlayerIndex = 0;
-    isReady = false;
+						if (sessionError) console.error('Error deleting session:', sessionError);
+					}
 
-    // Reset game state store
-    currentGameState.set({
-	  deckName: roomData?.game_mode || '',
-      currentCardIndex: 0,
-      totalCards: 0,
-      isDrawPhase: false,
-      currentCardContent: null
-    });
+					// 3. Finally, delete the room
+					const { error: roomError } = await supabase
+						.from('rooms')
+						.delete()
+						.eq('id', roomId);
 
-    // Force a refresh of the players' status
-    await loadPlayers();
+					if (roomError) console.error('Error deleting room:', roomError);
 
-    // Redirect to lobby
-    goto(`/lobby`);
+					console.log('✨ Cleanup completed successfully');
 
-    console.log('✅ Game end cleanup completed successfully');
+				} catch (cleanupError) {
+					console.error('Error during cleanup operations:', cleanupError);
+				}
+			}
 
-  } catch (err) {
-    console.error('💥 Error in game end cleanup:', err);
-  }
-}
+		} catch (err) {
+			console.error('💥 Error in game end cleanup:', err);
+		} finally {
+			// Reset the execution flag
+			handleGameEndCleanup.isExecuting = false;
+		}
+	}
 </script>
 
 <!-- Content -->
