@@ -8,10 +8,52 @@
   import { Input } from '$lib/components/ui/input';
   import { Label } from '$lib/components/ui/label';
   import { Separator } from '$lib/components/ui/separator';
+  import { onMount } from 'svelte';
 
   let inviteCode = '';
   let error = '';
   let isLoading = false;
+
+  let sound;
+  const soundFiles = {
+    'snap': '/sounds/select1.wav',
+    'click': '/sounds/select2.wav',
+    'flip': '/sounds/paper.mp3',
+    'wind': '/sounds/wind.mp3',
+    'pop': '/sounds/pop.wav',
+    'ping': '/sounds/ping.mp3',
+    'error': '/sounds/error.mp3',
+    'affirm': '/sounds/affirm.mp3'
+  };
+
+    // Initialize sound on mount
+  onMount(() => {
+    if (typeof window !== 'undefined') {
+      sound = new Audio();
+    }
+  });
+
+
+  function playSound(soundName) {
+    // Check if the soundName exists in the soundFiles object
+    const soundPath = soundFiles[soundName];
+
+    if (soundPath && sound) {
+      // If the audio is already playing, stop it and reset to the beginning
+      if (!sound.paused) {
+        sound.pause();
+        sound.currentTime = 0; // Reset audio to the start
+      }
+
+      // Set the new sound source and play
+      sound.src = soundPath;
+      sound.play().catch((error) => {
+        console.error('Error playing sound: ', error);
+      });
+    } else {
+      console.error('Sound not found or Audio not initialized: ' + soundName);
+    }
+  }
 
   const MAX_PLAYERS = 8; // Define maximum players allowed
 
@@ -37,6 +79,7 @@
 
       // Validate invite code format
       if (!validateInviteCode(inviteCode)) {
+        playSound("error");
         error = 'Invalid code format. Please enter 4 digits.';
         log(`Invalid code format: ${inviteCode}`, 'error');
         return;
@@ -45,6 +88,7 @@
       // Check if user has username
       const username = localStorage.getItem('username');
       if (!username) {
+        playSound("error");
         log('No username found, redirecting to username page', 'error');
         localStorage.setItem('roomAction', 'join');
         localStorage.setItem('pendingRoomCode', inviteCode); // Save the code
@@ -63,12 +107,14 @@
         .single();
 
       if (roomError || !room) {
+        playSound("error");
         error = 'Room not found. Please check the code.';
         log('Room not found', 'error');
         return;
       }
 
       if (room.status === 'playing') {
+        playSound("error");
         error = 'Game already in progress.';
         log('Game in progress', 'error');
         return;
@@ -83,6 +129,7 @@
         .single();
 
       if (existingPlayer) {
+        playSound("error");
         error = 'You are already in this room.';
         log('Player already in room', 'error');
         return;
@@ -101,6 +148,7 @@
 
       // Check if room is full
       if (players && players.length >= MAX_PLAYERS) {
+        playSound("error");
         error = `Room is full (${MAX_PLAYERS} players maximum)`;
         log('Room is full', 'error');
         return;
@@ -122,6 +170,7 @@
 
       if (playerError) {
         if (playerError.code === '23505') { // Unique constraint violation
+          playSound("error");
           error = 'You are already in this room.';
           log('Player already in room', 'error');
           return;
@@ -208,7 +257,7 @@
           variant="ghost"
           size="sm"
           class="hover:bg-accent hover:text-accent-foreground"
-          on:click={goToCreateRoom}
+          on:click={() => { goToCreateRoom(); playSound("snap"); }}
         >
           Create Room
         </Button>
@@ -218,7 +267,7 @@
         variant="outline"
         size="lg"
         class="w-full"
-        on:click={() => history.back()}
+        on:click={() => { playSound("pop"); history.back(); }}
       >
         Back
       </Button>

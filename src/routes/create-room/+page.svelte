@@ -17,6 +17,19 @@
   let error = '';
   let isLoading = false;
 
+  let sound;
+
+  const soundFiles = {
+    'snap': '/sounds/select1.wav',
+    'click': '/sounds/select2.wav',
+    'flip': '/sounds/paper.mp3',
+    'wind': '/sounds/wind.mp3',
+    'pop': '/sounds/pop.wav',
+    'ping': '/sounds/ping.mp3',
+    'error': '/sounds/error.mp3',
+    'affirm': '/sounds/affirm.mp3'
+  };
+
   $: console.log('Mode changed:', selectedMode);
 
   function handleModeChange(value: string) {
@@ -40,6 +53,10 @@
       localStorage.setItem('roomAction', 'create');
       goto('/username');
     }
+
+    if (typeof window !== 'undefined') {
+      sound = new Audio();
+    }
   });
 
   function validateRoomName(name) {
@@ -51,11 +68,33 @@
     return Math.floor(1000 + Math.random() * 9000).toString();
   }
 
+  function playSound(soundName) {
+    // Check if the soundName exists in the soundFiles object
+    const soundPath = soundFiles[soundName];
+
+    if (soundPath && sound) {
+      // If the audio is already playing, stop it and reset to the beginning
+      if (!sound.paused) {
+        sound.pause();
+        sound.currentTime = 0; // Reset audio to the start
+      }
+
+      // Set the new sound source and play
+      sound.src = soundPath;
+      sound.play().catch((error) => {
+        console.error('Error playing sound: ', error);
+      });
+    } else {
+      console.error('Sound not found or Audio not initialized: ' + soundName);
+    }
+  }
+
   async function handleSubmit() {
     try {
       log(`Attempting to create room with name: ${roomName} and mode: ${selectedMode}`, 'info');
 
       if (!validateRoomName(roomName)) {
+        playSound("error");
         error = 'Room name must be 3-20 alphanumeric characters';
         log(`Invalid room name: ${roomName}`, 'error');
         return;
@@ -133,6 +172,7 @@
 
       log('Redirecting to lobby...', 'info');
       goto('/lobby');
+      playSound("affirm");
 
     } catch (err) {
       log(`Error: ${err.message}`, 'error');
@@ -186,7 +226,7 @@
                 type="button"
                 class="w-full relative flex items-center p-4 cursor-pointer rounded-lg border border-input bg-background hover:bg-accent/5 transition-colors
                   {selectedMode === id ? 'border-primary ring-2 ring-ring' : ''}"
-                on:click={() => selectedMode = id}
+                on:click={() => { playSound("flip"); selectedMode = id; }}
               >
                 <div class="font-medium flex items-center gap-2">
                   {mode.name}
@@ -233,7 +273,7 @@
         variant="outline"
         size="lg"
         class="w-full"
-        on:click={() => history.back()}
+        on:click={() => { playSound("pop"); history.back(); }}
       >
         Back
       </Button>

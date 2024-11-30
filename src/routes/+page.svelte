@@ -266,7 +266,7 @@
           {#if !isFirstVisit}
             <Button 
               variant="outline"
-              on:click={() =>{ playSound("snap"); showTerms = false; }}
+              on:click={() =>{ playSound("pop"); showTerms = false; termsAccepted = false; }}
             >
               Maybe Later
             </Button>
