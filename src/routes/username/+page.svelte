@@ -11,9 +11,26 @@
   let error = '';
   let isLoading = false;
 
+  let sound;
+
+  const soundFiles = {
+    'snap': '/sounds/select1.wav',
+    'click': '/sounds/select2.wav',
+    'flip': '/sounds/paper.mp3',
+    'wind': '/sounds/wind.mp3',
+    'pop': '/sounds/pop.wav',
+    'ping': '/sounds/ping.mp3',
+    'error': '/sounds/error.mp3',
+    'affirm': '/sounds/affirm.mp3'
+  };
+
   onMount(() => {
     // Always use dark mode
     document.documentElement.classList.add('dark');
+
+    if (typeof window !== 'undefined') {
+      sound = new Audio();
+    }
   });
 
   function log(message, type = 'info') {
@@ -31,6 +48,27 @@
     return alphanumericRegex.test(name);
   }
 
+  function playSound(soundName) {
+    // Check if the soundName exists in the soundFiles object
+    const soundPath = soundFiles[soundName];
+
+    if (soundPath && sound) {
+      // If the audio is already playing, stop it and reset to the beginning
+      if (!sound.paused) {
+        sound.pause();
+        sound.currentTime = 0; // Reset audio to the start
+      }
+
+      // Set the new sound source and play
+      sound.src = soundPath;
+      sound.play().catch((error) => {
+        console.error('Error playing sound: ', error);
+      });
+    } else {
+      console.error('Sound not found or Audio not initialized: ' + soundName);
+    }
+  }
+
   async function handleSubmit() {
     try {
       isLoading = true;
@@ -38,16 +76,21 @@
 
       // Validate username
       if (!username.trim()) {
+        playSound('error');
         error = 'Username is required';
         log('Empty username submitted', 'error');
         return;
       }
 
       if (!validateUsername(username)) {
+        playSound('error');
         error = 'Username must be 2-20 alphanumeric characters only';
         log(`Invalid username format: ${username}`, 'error');
         return;
       }
+
+      playSound("snap");
+
       // Get previous username if exists
       const previousUsername = localStorage.getItem('username');
       if (previousUsername) {
@@ -133,7 +176,7 @@
         variant="outline"
         size="lg"
         class="w-full border-border text-foreground hover:bg-accent hover:text-accent-foreground"
-        on:click={() => history.back()}
+        on:click={() => { playSound("pop"); history.back(); }}
       >
         Back
       </Button>

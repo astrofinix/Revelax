@@ -49,10 +49,26 @@
 		isDrawPhase: false
 	});
 
-	
+	let sound;
+
+	const soundFiles = {
+		'snap': '/sounds/select1.wav',
+		'click': '/sounds/select2.wav',
+		'flip': '/sounds/paper.mp3',
+		'wind': '/sounds/wind.mp3',
+		'pop': '/sounds/pop.wav',
+		'ping': '/sounds/ping.mp3',
+		'error': '/sounds/error.mp3',
+		'affirm': '/sounds/affirm.mp3'
+	};
+
 	onMount(async () => {
 		console.log('Component mounted');
 		if (!browser) return;
+
+    if (typeof window !== 'undefined') {
+      sound = new Audio();
+    }
 
 		// Check for required data
 		if (!userId || !roomId) {
@@ -98,6 +114,27 @@
 			goto('/');
 		}
 	});
+
+	function playSound(soundName) {
+    // Check if the soundName exists in the soundFiles object
+    const soundPath = soundFiles[soundName];
+
+    if (soundPath && sound) {
+      // If the audio is already playing, stop it and reset to the beginning
+      if (!sound.paused) {
+        sound.pause();
+        sound.currentTime = 0; // Reset audio to the start
+      }
+
+      // Set the new sound source and play
+      sound.src = soundPath;
+      sound.play().catch((error) => {
+        console.error('Error playing sound: ', error);
+      });
+    } else {
+      console.error('Sound not found or Audio not initialized: ' + soundName);
+    }
+  }
 
 	async function handlePlayerChange() {
 		await loadPlayers();
@@ -300,6 +337,7 @@
 	async function handlePlayerLeave() {
 		try {
 			if (!userId || !roomId) return;
+			
 
 			// If admin is leaving, transfer admin rights
 			if (userId === roomData?.admin_id && players.length > 1) {
@@ -338,6 +376,8 @@
 	async function handleLeaveRoom() {
 		try {
 			isLoading = true;
+
+			playSound("error");
 
 			// If admin is leaving, transfer admin rights
 			if (userId === roomData?.admin_id && players.length > 1) {
@@ -1716,7 +1756,7 @@ async function handleGameEndForAll() {
 						class="w-full {isReady ? 'bg-primary hover:bg-primary/90' : ''}"
 						disabled={isLoading ||
 							(userId === roomData?.admin_id && selectedGameMode !== roomData?.game_mode)}
-						on:click={toggleReady}
+						on:click={() => { toggleReady(); playSound("snap"); }}
 					>
 						{#if isLoading}
 							<span class="animate-pulse">Loading...</span>
@@ -1739,7 +1779,7 @@ async function handleGameEndForAll() {
 						size="lg"
 						class="w-full hover:bg-destructive hover:text-destructive-foreground"
 						disabled={isLoading}
-						on:click={() => (showLeaveConfirm = true)}
+						on:click={() => { playSound("error"); showLeaveConfirm = true; }}
 					>
 						Leave Room
 					</Button>
@@ -1762,7 +1802,7 @@ async function handleGameEndForAll() {
 			</Dialog.Description>
 		</Dialog.Header>
 		<Dialog.Footer class="flex gap-2">
-			<Button variant="outline" on:click={() => (showLeaveConfirm = false)}>Cancel</Button>
+			<Button variant="outline" on:click={() => {showLeaveConfirm = false; playSound("snap"); }}>Cancel</Button>
 			<Button variant="destructive" on:click={handleLeaveRoom} disabled={isLoading}>
 				{isLoading ? 'Leaving...' : 'Leave Room'}
 			</Button>
