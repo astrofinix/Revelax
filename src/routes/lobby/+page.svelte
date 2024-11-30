@@ -482,13 +482,6 @@ function setupSubscriptions() {
         filter: `id=eq.${gameSession?.id}`
       }, 
       async (payload) => {
-        // Handle game end when session becomes inactive
-        if (payload.new && !payload.new.is_active) {
-          console.log('🏁 Game session became inactive, cleaning up...');
-          await handleGameEndCleanup();
-          return;
-        }
-
         // Handle other updates as before
         const hasChanges = 
           payload.new.current_card_revealed !== gameSession?.current_card_revealed ||
@@ -1133,6 +1126,19 @@ function setupSubscriptions() {
 
 	async function updateGameSession() {
 		try {
+			 // 1. First check if session is still active
+			 const { data: sessionStatus, error: statusError } = await supabase
+			.from('game_sessions')
+			.select('is_active')
+			.eq('id', gameSession.id)
+			.single();
+
+			// If session doesn't exist or is inactive, cleanup and return
+			if (sessionStatus.is_active === false) {
+				handleGameEndCleanup();
+				return;
+			}
+
 			// Get current game session state
 			const { data: currentSession, error: sessionError } = await supabase
 				.from('game_sessions')
@@ -1140,6 +1146,7 @@ function setupSubscriptions() {
 				.eq('id', gameSession.id)
 				.single();
 
+			console.log('🔄 Current game session:', currentSession);
 			if (sessionError) throw sessionError;
 
 			// Update local state based on session
@@ -1177,7 +1184,41 @@ function setupSubscriptions() {
 
 	async function handleGameEndCleanup() {
   try {
-    // 1. Reset all players' ready status
+    // First, check if cleanup has already been performed
+    const { data: currentRoom } = await supabase
+      .from('rooms')
+      .select('status, game_session_id')
+      .eq('id', roomId)
+      .single();
+
+    // If room is already in 'waiting' state and has no game session, cleanup was already done
+    if (currentRoom.status === 'waiting' && !currentRoom.game_session_id) {
+      console.log('✨ Cleanup already performed, skipping database operations');
+      
+      // Still reset local state
+      gameStarted = false;
+      gameSession = null;
+      currentCard = null;
+      isMyTurn = false;
+      isCardRevealed = false;
+      currentPlayerIndex = 0;
+      isReady = false;
+
+      // Reset game state store
+      currentGameState.set({
+        deckName: '',
+        currentCardIndex: 0,
+        totalCards: 0,
+        isDrawPhase: false,
+        currentCardContent: null
+      });
+
+      // Redirect to lobby
+      goto(`/lobby`);
+      return;
+    }
+
+    // If cleanup hasn't been performed, do it now
     const { error: playersError } = await supabase
       .from('players')
       .update({ 
@@ -1188,25 +1229,7 @@ function setupSubscriptions() {
 
     if (playersError) throw playersError;
 
-	// 4. Reset all local state
-	gameStarted = false;
-    gameSession = null;
-    currentCard = null;
-    isMyTurn = false;
-    isCardRevealed = false;
-    currentPlayerIndex = 0;
-    isReady = false;
-
-    // 5. Reset game state store
-    currentGameState.set({
-      deckName: '',
-      currentCardIndex: 0,
-      totalCards: 0,
-      isDrawPhase: false,
-      currentCardContent: null
-    });
-
-    // 2. Update room status and remove game session reference
+    // Update room status and remove game session reference
     const { error: roomError } = await supabase
       .from('rooms')
       .update({
@@ -1216,15 +1239,9 @@ function setupSubscriptions() {
       })
       .eq('id', roomId);
 
-	  // 6. Force a refresh of the players' status
-	  await loadPlayers();
-
-	// 7. Redirect to lobby
-	goto(`/lobby`);
-
     if (roomError) throw roomError;
 
-    // 3. Delete the inactive game session
+    // Delete the inactive game session
     const { error: sessionError } = await supabase
       .from('game_sessions')
       .delete()
@@ -1232,6 +1249,30 @@ function setupSubscriptions() {
       .eq('room_id', roomId);
 
     if (sessionError) throw sessionError;
+
+    // Reset all local state
+    gameStarted = false;
+    gameSession = null;
+    currentCard = null;
+    isMyTurn = false;
+    isCardRevealed = false;
+    currentPlayerIndex = 0;
+    isReady = false;
+
+    // Reset game state store
+    currentGameState.set({
+      deckName: '',
+      currentCardIndex: 0,
+      totalCards: 0,
+      isDrawPhase: false,
+      currentCardContent: null
+    });
+
+    // Force a refresh of the players' status
+    await loadPlayers();
+
+    // Redirect to lobby
+    goto(`/lobby`);
 
     console.log('✅ Game end cleanup completed successfully');
 
