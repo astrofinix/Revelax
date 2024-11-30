@@ -542,6 +542,7 @@ function setupSubscriptions() {
   };
 }
 
+
 	// Add new handler for player state changes
 	async function handlePlayerStateChange(payload) {
 		try {
@@ -678,6 +679,57 @@ function setupSubscriptions() {
 		}
 	}
 
+	async function generateCardSequence(gameMode) {
+		try {
+			// Fetch the deck configuration for the specific game mode
+			const { data: deckConfig, error: deckError } = await supabase
+				.from('deck_cards')
+				.select('sequence_pattern')
+				.eq('game_mode', gameMode)
+				.single();
+
+			if (deckError) throw deckError;
+
+			// Fetch all cards for the game mode
+			const { data: cards, error: cardsError } = await supabase
+				.from('game_cards')
+				.select('card_index')
+				.eq('game_mode', gameMode)
+				.order('card_index');
+
+			if (cardsError) throw cardsError;
+			if (!cards?.length) throw new Error('No cards found for this game mode');
+
+			// Convert card indices to array
+			const cardIndices = cards.map((card) => card.card_index);
+
+			// Implement sequence generation logic similar to the PostgreSQL function
+			const sequencePattern = deckConfig.sequence_pattern;
+			let finalSequence = [];
+			let currentIndex = 0;
+
+			// Generate sequence based on pattern
+			for (const chunkSize of sequencePattern) {
+				// Extract chunk of cards
+				const chunk = cardIndices.slice(currentIndex, currentIndex + chunkSize);
+				
+				// Randomize the chunk
+				const randomizedChunk = chunk.sort(() => Math.random() - 0.5);
+				
+				// Add to final sequence
+				finalSequence = [...finalSequence, ...randomizedChunk];
+				
+				// Update current index
+				currentIndex += chunkSize;
+			}
+
+			return finalSequence;
+		} catch (error) {
+			console.error('Error generating card sequence:', error);
+			throw error;
+		}
+	}
+
 	async function handleGameStart() {
 		console.log('🎮 Initiating game start...');
 		try {
@@ -730,31 +782,10 @@ function setupSubscriptions() {
 				return true;
 			}
 
-			// 1. Update room status to 'starting'
-			const { error: roomUpdateError } = await supabase
-				.from('rooms')
-				.update({ status: 'starting' })
-				.eq('id', roomId)
-				.eq('status', 'waiting'); // Only update if status is 'waiting'
+			// Generate card sequence first
+			const cardSequence = await generateCardSequence(roomData.game_mode);
 
-			if (roomUpdateError) throw roomUpdateError;
-
-			// 2. Get all cards for the current game mode
-			const { data: cards, error: cardsError } = await supabase
-				.from('game_cards')
-				.select('card_index')
-				.eq('game_mode', roomData.game_mode)
-				.order('card_index');
-
-			if (cardsError) throw cardsError;
-			if (!cards?.length) {
-				throw new Error('No cards found for this game mode');
-			}
-
-			// 3. Create randomized card sequence
-			const cardSequence = cards.map((card) => card.card_index).sort(() => Math.random() - 0.5);
-
-			// 4. Create player sequence (starting with admin)
+			// Create player sequence (starting with admin)
 			const playerSequence = players
 				.sort((a, b) => {
 					// Ensure admin is first
@@ -764,41 +795,54 @@ function setupSubscriptions() {
 				})
 				.map((player) => player.user_id);
 
-			console.log('📊 Game setup:', {
-				cardSequence,
-				playerSequence,
-				gameMode: roomData.game_mode
-			});
-
-			// 5. Create game session using the safe function
-			const { data: session, error: sessionError } = await supabase.rpc(
-				'create_game_session_safe',
-				{
-					p_room_id: roomId,
-					p_card_sequence: cardSequence,
-					p_player_sequence: playerSequence,
-					p_started_at: new Date().toISOString()
-				}
-			);
+			// Create game session
+			const { data: session, error: sessionError } = await supabase
+				.from('game_sessions')
+				.insert([{
+					room_id: roomId,
+					card_sequence: cardSequence,
+					player_sequence: playerSequence,
+					current_card: cardSequence[0],
+					current_card_index: 0,
+					current_player_index: 0,
+					activity_status: 'active',
+					started_at: new Date().toISOString(),
+					last_update: new Date().toISOString(),
+					current_card_revealed: false,
+					current_card_content: null
+				}])
+				.select()
+				.single();
 
 			if (sessionError) throw sessionError;
 
-			// 6. Update local game state
+			// Update room status
+			const { error: roomError } = await supabase
+				.from('rooms')
+				.update({ 
+					status: 'playing',
+					game_session_id: session.id 
+				})
+				.eq('id', roomId);
+
+			if (roomError) throw roomError;
+
+			// Update local game state
 			gameSession = session;
 			gameStarted = true;
 			currentPlayerIndex = 0;
 			isMyTurn = userId === playerSequence[0];
 			isCardRevealed = false;
 
-			// 7. Update game state store
+			// Update game state store
 			currentGameState.set({
 				deckName: roomData.game_mode,
 				currentCardIndex: 0,
-				totalCards: cardSequence.length,
+				totalCards: session.card_sequence.length,
 				isDrawPhase: isMyTurn
 			});
 
-			// 8. Load first card
+			// Load first card
 			if (session.current_card) {
 				const { data: cardData, error: cardError } = await supabase
 					.from('game_cards')
@@ -810,14 +854,6 @@ function setupSubscriptions() {
 				if (cardError) throw cardError;
 				currentCard = cardData;
 			}
-
-			// 9. Update room status to 'playing'
-			const { error: finalRoomUpdateError } = await supabase
-				.from('rooms')
-				.update({ status: 'playing' })
-				.eq('id', roomId);
-
-			if (finalRoomUpdateError) throw finalRoomUpdateError;
 
 			console.log('✨ Game start initiated successfully!');
 			return true;
@@ -1354,7 +1390,7 @@ async function handleGameEndForAll() {
     await loadPlayers();
     
     // Navigate back to lobby
-    console.log('🔄 Redirecting to lobby...');
+    console.log('�� Redirecting to lobby...');
     goto(`/lobby`);
 
   } catch (err) {

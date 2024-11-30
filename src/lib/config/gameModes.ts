@@ -9,13 +9,13 @@ interface GameMode {
     fil_chill: {
       id: 'fil_chill',
       name: '🍻 The Filipino Chillnuman',
-      description: 'Casual questions about Filipino culture, food, and traditions. Perfect for a laid-back gathering with friends.',
+      description: 'Casual bardagulan questions, dares to get everyone talking and laughing. Perfect for a chaos-and-fun-filled gathering.',
       cardCount: 20
     },
     yap_sesh: {
       id: 'yap_sesh',
       name: '💭 Yap Session',
-      description: 'Fun and light-hearted questions to get everyone talking and laughing. Great for breaking the ice!',
+      description: 'A lively mix of quirky and easygoing questions to spark fun conversations and endless laughs. Perfect for warming up the group and setting the vibe.',
       cardCount: 25
     },
     night_talk: {
@@ -27,7 +27,7 @@ interface GameMode {
     love_exp: {
       id: 'love_exp',
       name: '❤️ The Love (?) Experiment',
-      description: 'Inspired by the 36 questions that lead to love. Intimate questions designed to create meaningful connections between players.',
+      description: 'Inspired by the 36 questions that lead to love. Delve into questions designed to create meaningful connections between two people.',
       cardCount: 36
     }
   } as const;
